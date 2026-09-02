@@ -39,3 +39,4 @@ Open http://localhost:3000
 - Dress code: Formal — Semi Formal
 - RSVP deadline: April 5, 2026
 - Contact: Shintal Khye / Nezeal Ven
+Wedding RSVP website
