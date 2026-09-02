@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+:root {
+  --cream: #f8f4ed;
+  --ink: #29251f;
+  --muted: #746d63;
+  --gold: #a88345;
+  --line: #ddd4c7;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+}
+button, input, select, textarea { font: inherit; }
+.sans { font-family: Arial, Helvetica, sans-serif; }
+.script { font-family: "Brush Script MT", "Segoe Script", cursive; }
+.paper-texture {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(168,131,69,.07) 0 1px, transparent 1px 100%),
+    var(--cream);
+  background-size: 18px 18px;
+}
