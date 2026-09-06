@@ -9,14 +9,7 @@ import { supabase } from "../lib/supabase";
   =====================================================
 
   Add your invited names here.
-
-  Each name automatically has 2 seats reserved.
-
-  Example:
-  "John Doe",
-  "Maria Santos",
-
-  You can add as many names as you need.
+  Each invitation has 2 reserved seats.
 */
 
 const invitedGuests = [
@@ -34,7 +27,7 @@ export default function Home() {
   const [opened, setOpened] = useState(false);
 
   /* -------------------------------------------------
-     INVITATION SEARCH
+     INVITATION / RSVP ACCESS
   ------------------------------------------------- */
 
   const [searchName, setSearchName] = useState("");
@@ -42,8 +35,10 @@ export default function Home() {
   const [invitationError, setInvitationError] = useState("");
   const [matchedGuest, setMatchedGuest] = useState("");
 
+  const [walkIn, setWalkIn] = useState(false);
+
   /* -------------------------------------------------
-     RSVP
+     RSVP FORM
   ------------------------------------------------- */
 
   const [guestName, setGuestName] = useState("");
@@ -64,7 +59,6 @@ export default function Home() {
 
     setInvitationError("");
     setInvitationFound(false);
-    setMatchedGuest("");
 
     if (!search) {
       setInvitationError("Please enter your name.");
@@ -77,15 +71,33 @@ export default function Home() {
 
     if (!foundGuest) {
       setInvitationError(
-        "We couldn't find an invitation under that name. Please check the spelling or contact the couple."
+        "We couldn't find an invitation under that name. Please check the spelling or choose the Walk-In RSVP option below."
       );
       return;
     }
 
     setInvitationFound(true);
+    setWalkIn(false);
     setMatchedGuest(foundGuest);
+
     setGuestName(foundGuest);
     setGuests("1");
+    setStatus("");
+  }
+
+  /* -------------------------------------------------
+     WALK-IN RSVP
+  ------------------------------------------------- */
+
+  function openWalkInRSVP() {
+    setWalkIn(true);
+    setInvitationFound(false);
+    setMatchedGuest("");
+    setGuestName("");
+    setSearchName("");
+    setInvitationError("");
+    setGuests("1");
+    setStatus("");
   }
 
   /* -------------------------------------------------
@@ -98,14 +110,19 @@ export default function Home() {
     setLoading(true);
     setStatus("");
 
-    if (!invitationFound) {
-      setStatus("Please find your invitation first.");
+    if (!invitationFound && !walkIn) {
+      setStatus("Please find your invitation or choose Walk-In RSVP.");
       setLoading(false);
       return;
     }
 
+    /*
+      Invited guests are limited to 2 seats.
+      Walk-ins are also limited to 2 for this RSVP form.
+    */
+
     if (Number(guests) > 2) {
-      setStatus("Your invitation is limited to 2 seats.");
+      setStatus("The maximum number of guests is 2.");
       setGuests("2");
       setLoading(false);
       return;
@@ -117,12 +134,22 @@ export default function Home() {
       return;
     }
 
+    /*
+      Keep the guest's name exactly as entered/recognized.
+      Walk-ins are marked in the message so they can be
+      identified in the existing Admin Panel.
+    */
+
+    const finalMessage = walkIn
+      ? `[WALK-IN RSVP] ${message || ""}`.trim()
+      : message || null;
+
     const { error } = await supabase.from("rsvps").insert({
       guest_name: guestName,
       email: email,
       attendance: attendance,
       guests: Number(guests),
-      message: message || null,
+      message: finalMessage || null,
     });
 
     if (error) {
@@ -194,7 +221,6 @@ END:VCALENDAR`;
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
-
     link.href = url;
     link.download = "nezeal-shintal-wedding.ics";
 
@@ -213,7 +239,6 @@ END:VCALENDAR`;
     return (
       <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] flex items-center justify-center px-6 relative overflow-hidden">
 
-        {/* Decorative background */}
         <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#eadfd2] opacity-40 blur-3xl" />
 
         <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-[#e4d4c2] opacity-40 blur-3xl" />
@@ -241,6 +266,7 @@ END:VCALENDAR`;
           </h1>
 
           <div className="my-8 flex items-center justify-center gap-4">
+
             <div className="h-px w-16 bg-[#c9b49e]" />
 
             <span className="text-[#9a7654] text-lg">
@@ -248,6 +274,7 @@ END:VCALENDAR`;
             </span>
 
             <div className="h-px w-16 bg-[#c9b49e]" />
+
           </div>
 
           <p className="font-serif text-2xl md:text-3xl">
@@ -276,7 +303,7 @@ END:VCALENDAR`;
   }
 
   /* =================================================
-     RSVP PAGE
+     MAIN RSVP PAGE
   ================================================= */
 
   return (
@@ -305,10 +332,10 @@ END:VCALENDAR`;
         </section>
 
         {/* =================================================
-           FIND YOUR INVITATION
+           FIND INVITATION / WALK-IN
         ================================================= */}
 
-        {!invitationFound && (
+        {!invitationFound && !walkIn && (
           <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm mb-14">
 
             <div className="text-center">
@@ -322,8 +349,7 @@ END:VCALENDAR`;
               </h2>
 
               <p className="mt-4 text-sm text-[#756d63] max-w-md mx-auto">
-                Please enter your full name exactly as it appears on your
-                invitation.
+                Enter your name as it appears on your invitation.
               </p>
 
             </div>
@@ -366,6 +392,36 @@ END:VCALENDAR`;
             >
               Find My Invitation
             </button>
+
+            {/* WALK-IN OPTION */}
+
+            <div className="flex items-center gap-4 my-8">
+
+              <div className="h-px bg-[#ddd5ca] flex-1" />
+
+              <span className="text-xs tracking-[0.2em] uppercase text-[#9a7654]">
+                or
+              </span>
+
+              <div className="h-px bg-[#ddd5ca] flex-1" />
+
+            </div>
+
+            <div className="text-center">
+
+              <p className="text-sm text-[#756d63] mb-4">
+                Don't have an invitation?
+              </p>
+
+              <button
+                type="button"
+                onClick={openWalkInRSVP}
+                className="w-full border border-[#9a7654] text-[#9a7654] rounded-full py-4 tracking-[0.2em] uppercase text-xs hover:bg-[#9a7654] hover:text-white transition"
+              >
+                RSVP as Walk-In
+              </button>
+
+            </div>
 
           </section>
         )}
@@ -427,12 +483,52 @@ END:VCALENDAR`;
         )}
 
         {/* =================================================
+           WALK-IN NOTICE
+        ================================================= */}
+
+        {walkIn && (
+          <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm mb-14 text-center">
+
+            <div className="text-4xl mb-4">
+              ♡
+            </div>
+
+            <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-4">
+              Walk-In RSVP
+            </p>
+
+            <h2 className="font-serif text-3xl md:text-4xl">
+              Welcome
+            </h2>
+
+            <p className="mt-4 text-[#756d63]">
+              Please complete the RSVP form below.
+            </p>
+
+            <p className="mt-3 text-sm text-[#9a7654]">
+              Maximum of 2 guests.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setWalkIn(false);
+                setStatus("");
+              }}
+              className="block mx-auto mt-6 text-xs tracking-[0.15em] uppercase text-[#9a7654] underline underline-offset-4"
+            >
+              Back to invitation search
+            </button>
+
+          </section>
+        )}
+
+        {/* =================================================
            EVENT INFORMATION
         ================================================= */}
 
         <section className="text-center mb-14">
 
-          {/* Couple Name */}
           <h2 className="font-serif text-4xl md:text-5xl tracking-wide text-[#9a7654] leading-tight">
             Nezeal Ven & Shintal Khye
           </h2>
@@ -462,6 +558,7 @@ END:VCALENDAR`;
           </div>
 
           {/* Calendar Buttons */}
+
           <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
 
             <button
@@ -493,13 +590,13 @@ END:VCALENDAR`;
            RSVP FORM
         ================================================= */}
 
-        {invitationFound && (
+        {(invitationFound || walkIn) && (
           <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm">
 
             <div className="text-center mb-8">
 
               <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-3">
-                RSVP
+                {walkIn ? "Walk-In RSVP" : "RSVP"}
               </p>
 
               <h2 className="font-serif text-3xl md:text-4xl">
@@ -507,7 +604,9 @@ END:VCALENDAR`;
               </h2>
 
               <p className="mt-3 text-sm text-[#756d63]">
-                Your invitation includes a maximum of 2 seats.
+                {walkIn
+                  ? "Please provide your details below."
+                  : "Your invitation includes a maximum of 2 seats."}
               </p>
 
             </div>
@@ -517,7 +616,8 @@ END:VCALENDAR`;
               className="space-y-7"
             >
 
-              {/* Name */}
+              {/* NAME */}
+
               <div>
 
                 <label className="block text-xs tracking-[0.25em] uppercase mb-3">
@@ -529,12 +629,14 @@ END:VCALENDAR`;
                   value={guestName}
                   onChange={(e) => setGuestName(e.target.value)}
                   required
+                  placeholder="Your full name"
                   className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
                 />
 
               </div>
 
-              {/* Email */}
+              {/* EMAIL */}
+
               <div>
 
                 <label className="block text-xs tracking-[0.25em] uppercase mb-3">
@@ -552,10 +654,12 @@ END:VCALENDAR`;
 
               </div>
 
-              {/* Attendance + Guests */}
+              {/* ATTENDANCE + GUESTS */}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
 
                 {/* Attendance */}
+
                 <div>
 
                   <label className="block text-xs tracking-[0.25em] uppercase mb-3">
@@ -581,6 +685,7 @@ END:VCALENDAR`;
                 </div>
 
                 {/* Guests */}
+
                 <div>
 
                   <label className="block text-xs tracking-[0.25em] uppercase mb-3">
@@ -607,24 +712,26 @@ END:VCALENDAR`;
 
               </div>
 
-              {/* Reserved Seats Notice */}
+              {/* SEAT NOTICE */}
+
               <div className="rounded-2xl bg-[#f8f5ef] p-5 text-center">
 
                 <p className="text-xs tracking-[0.2em] uppercase text-[#9a7654]">
-                  Your Invitation
+                  {walkIn ? "Walk-In Limit" : "Your Invitation"}
                 </p>
 
                 <p className="font-serif text-xl mt-2">
-                  2 seats reserved
+                  Maximum 2 guests
                 </p>
 
                 <p className="text-xs text-[#8a8177] mt-1">
-                  Please do not exceed your reserved seats.
+                  Please do not exceed the maximum number of seats.
                 </p>
 
               </div>
 
-              {/* Message */}
+              {/* MESSAGE */}
+
               <div>
 
                 <label className="block text-xs tracking-[0.25em] uppercase mb-3">
@@ -641,7 +748,8 @@ END:VCALENDAR`;
 
               </div>
 
-              {/* Status */}
+              {/* STATUS */}
+
               {status && (
                 <div
                   className={`text-center text-sm ${
@@ -654,7 +762,8 @@ END:VCALENDAR`;
                 </div>
               )}
 
-              {/* Submit */}
+              {/* SUBMIT */}
+
               <button
                 type="submit"
                 disabled={loading}
