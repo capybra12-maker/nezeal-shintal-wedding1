@@ -4,7 +4,6 @@ import { FormEvent, useState } from "react";
 import {
   Calendar,
   Check,
-  ChevronLeft,
   Heart,
   Minus,
   Plus,
@@ -98,9 +97,11 @@ export default function RSVPPage() {
 
     if (insertError) {
       console.error("RSVP ERROR:", insertError);
+
       setError(
         `RSVP Error: ${insertError.message}`
       );
+
       return;
     }
 
@@ -159,8 +160,10 @@ export default function RSVPPage() {
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "nezeal-shintal-wedding.ics";
+
     link.click();
 
     URL.revokeObjectURL(url);
@@ -173,6 +176,7 @@ export default function RSVPPage() {
     return (
       <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
         <div className="mx-auto flex min-h-[80vh] max-w-2xl items-center justify-center">
+
           <div className="w-full rounded-[2rem] border border-[#ded6ca] bg-white p-8 text-center shadow-sm md:p-14">
 
             <Heart
@@ -196,6 +200,7 @@ export default function RSVPPage() {
             </p>
 
             <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6">
+
               <p className="font-serif text-2xl">
                 Nezeal Ven &amp; Shintal Khye
               </p>
@@ -203,6 +208,7 @@ export default function RSVPPage() {
               <p className="mt-3 text-sm text-[#777067]">
                 April 23, 2026 · 4:00 PM
               </p>
+
             </div>
 
             <div className="mt-8 grid gap-3 md:grid-cols-2">
@@ -226,7 +232,9 @@ export default function RSVPPage() {
               </button>
 
             </div>
+
           </div>
+
         </div>
       </main>
     );
@@ -237,19 +245,11 @@ export default function RSVPPage() {
    */
   return (
     <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
+
       <div className="mx-auto max-w-2xl">
 
-        {/* BACK */}
-        <button
-          type="button"
-          onClick={() => window.history.back()}
-          className="mb-10 flex items-center gap-2 text-sm text-[#82786c]"
-        >
-          <ChevronLeft size={16} />
-          Back
-        </button>
-
         {/* WEDDING HEADER */}
+
         <div className="text-center">
 
           <p className="mb-5 text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
@@ -257,11 +257,13 @@ export default function RSVPPage() {
           </p>
 
           <div className="mb-6 flex justify-center">
+
             <Heart
               size={32}
               strokeWidth={1}
               className="text-[#9b8d7b]"
             />
+
           </div>
 
           <p className="mb-4 font-serif text-lg italic text-[#817669]">
@@ -269,11 +271,15 @@ export default function RSVPPage() {
           </p>
 
           <h1 className="font-serif text-5xl leading-tight md:text-7xl">
+
             Nezeal Ven
+
             <span className="mx-3 text-[#a99b89]">
               &amp;
             </span>
+
             Shintal Khye
+
           </h1>
 
           <div className="mx-auto my-8 h-px w-24 bg-[#b9ad9d]" />
@@ -288,10 +294,13 @@ export default function RSVPPage() {
 
         </div>
 
-        {/* RSVP CARD */}
+
+        {/* RSVP FORM CARD */}
+
         <div className="mt-12 rounded-[2rem] border border-[#ded6ca] bg-white p-7 shadow-sm md:p-12">
 
           {/* TITLE */}
+
           <div className="text-center">
 
             <p className="text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
@@ -308,12 +317,14 @@ export default function RSVPPage() {
 
           </div>
 
+
           <form
             onSubmit={handleSubmit}
             className="mt-10"
           >
 
-            {/* NAME */}
+            {/* MAIN GUEST */}
+
             <div>
 
               <label
@@ -337,7 +348,9 @@ export default function RSVPPage() {
 
             </div>
 
+
             {/* ATTENDANCE */}
+
             <div className="mt-8">
 
               <p className="mb-4 text-xs uppercase tracking-[0.25em] text-[#9b9185]">
@@ -360,12 +373,14 @@ export default function RSVPPage() {
                   Joyfully Accepts
                 </button>
 
+
                 <button
                   type="button"
                   onClick={() => {
                     setAttendance(
                       "not_attending"
                     );
+
                     updateGuestCount(1);
                   }}
                   className={`rounded-full border px-5 py-4 text-sm transition ${
@@ -379,15 +394,20 @@ export default function RSVPPage() {
                 </button>
 
               </div>
+
             </div>
 
-            {/* GUEST COUNT */}
+
+            {/* GUESTS */}
+
             {attendance === "attending" && (
+
               <div className="mt-8">
 
                 <p className="mb-4 text-xs uppercase tracking-[0.25em] text-[#9b9185]">
                   Number of Guests
                 </p>
+
 
                 <div className="flex items-center justify-between rounded-2xl bg-[#f8f5ef] px-5 py-5">
 
@@ -403,7 +423,10 @@ export default function RSVPPage() {
 
                   </div>
 
+
                   <div className="flex items-center gap-3">
+
+                    {/* MINUS */}
 
                     <button
                       type="button"
@@ -418,9 +441,15 @@ export default function RSVPPage() {
                       <Minus size={16} />
                     </button>
 
+
+                    {/* NUMBER */}
+
                     <span className="w-8 text-center text-lg">
                       {guestCount}
                     </span>
+
+
+                    {/* PLUS */}
 
                     <button
                       type="button"
@@ -439,16 +468,21 @@ export default function RSVPPage() {
 
                 </div>
 
-                {/* ADDITIONAL GUESTS */}
+
+                {/* ADDITIONAL GUEST NAMES */}
+
                 {guestCount > 1 && (
+
                   <div className="mt-6 space-y-4">
 
                     <p className="text-xs uppercase tracking-[0.25em] text-[#9b9185]">
                       Additional Guest Names
                     </p>
 
+
                     {guestNames.map(
                       (guestName, index) => (
+
                         <div key={index}>
 
                           <label
@@ -457,6 +491,7 @@ export default function RSVPPage() {
                           >
                             Guest {index + 1}
                           </label>
+
 
                           <input
                             id={`guest-${index}`}
@@ -476,16 +511,21 @@ export default function RSVPPage() {
                           />
 
                         </div>
+
                       )
                     )}
 
                   </div>
+
                 )}
 
               </div>
+
             )}
 
+
             {/* MESSAGE */}
+
             <div className="mt-8">
 
               <label
@@ -508,14 +548,20 @@ export default function RSVPPage() {
 
             </div>
 
+
             {/* ERROR */}
+
             {error && (
+
               <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700">
                 {error}
               </div>
+
             )}
 
+
             {/* DEADLINE */}
+
             <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6 text-center">
 
               <p className="font-serif text-2xl">
@@ -528,7 +574,9 @@ export default function RSVPPage() {
 
             </div>
 
+
             {/* SUBMIT */}
+
             <button
               type="submit"
               disabled={
@@ -551,7 +599,9 @@ export default function RSVPPage() {
 
         </div>
 
+
         {/* CALENDAR */}
+
         <div className="py-10 text-center">
 
           <p className="font-serif text-2xl">
@@ -561,6 +611,7 @@ export default function RSVPPage() {
           <p className="mt-2 text-sm text-[#777067]">
             Save our wedding day to your calendar.
           </p>
+
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
 
@@ -572,6 +623,7 @@ export default function RSVPPage() {
               <Calendar size={17} />
               Add to Google Calendar
             </button>
+
 
             <button
               type="button"
@@ -587,6 +639,7 @@ export default function RSVPPage() {
         </div>
 
       </div>
+
     </main>
   );
 }
