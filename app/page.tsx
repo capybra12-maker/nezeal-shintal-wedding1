@@ -3,43 +3,34 @@
 import { FormEvent, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-/*
-  =====================================================
-  INVITED GUEST LIST
-  =====================================================
-
-  Add your invited names here.
-  Each invitation has 2 reserved seats.
-*/
-
-const invitedGuests = [
-  "John Doe",
-  "Jane Smith",
-  "Michael Santos",
-  "Sarah Garcia",
-];
-
 export default function Home() {
-  /* -------------------------------------------------
+  /* =================================================
      OPENING INVITATION
-  ------------------------------------------------- */
+  ================================================= */
 
   const [opened, setOpened] = useState(false);
 
-  /* -------------------------------------------------
-     INVITATION / RSVP ACCESS
-  ------------------------------------------------- */
+  /* =================================================
+     INVITATION SEARCH
+  ================================================= */
 
   const [searchName, setSearchName] = useState("");
   const [invitationFound, setInvitationFound] = useState(false);
   const [invitationError, setInvitationError] = useState("");
   const [matchedGuest, setMatchedGuest] = useState("");
+  const [seatsReserved, setSeatsReserved] = useState(2);
+
+  const [searching, setSearching] = useState(false);
+
+  /* =================================================
+     WALK-IN
+  ================================================= */
 
   const [walkIn, setWalkIn] = useState(false);
 
-  /* -------------------------------------------------
+  /* =================================================
      RSVP FORM
-  ------------------------------------------------- */
+  ================================================= */
 
   const [guestName, setGuestName] = useState("");
   const [email, setEmail] = useState("");
@@ -50,59 +41,97 @@ export default function Home() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* -------------------------------------------------
-     FIND INVITATION
-  ------------------------------------------------- */
+  /* =================================================
+     FIND INVITATION FROM SUPABASE
+  ================================================= */
 
-  function findInvitation() {
-    const search = searchName.trim().toLowerCase();
+  async function findInvitation() {
+    const search = searchName.trim();
 
     setInvitationError("");
     setInvitationFound(false);
+    setMatchedGuest("");
 
     if (!search) {
       setInvitationError("Please enter your name.");
       return;
     }
 
-    const foundGuest = invitedGuests.find(
-      (name) => name.toLowerCase() === search
-    );
-
-    if (!foundGuest) {
-      setInvitationError(
-        "We couldn't find an invitation under that name. Please check the spelling or choose the Walk-In RSVP option below."
-      );
+    if (!supabase) {
+      setInvitationError("Database is not configured.");
       return;
     }
 
+    setSearching(true);
+
+    const { data, error } = await supabase
+      .from("invited_guests")
+      .select("full_name, seats_reserved")
+      .ilike("full_name", search)
+      .maybeSingle();
+
+    setSearching(false);
+
+    if (error) {
+      console.error(error);
+
+      setInvitationError(
+        "We couldn't check your invitation right now. Please try again."
+      );
+
+      return;
+    }
+
+    if (!data) {
+      setInvitationError(
+        "We couldn't find an invitation under that name. Please check the spelling or choose the Walk-In RSVP option below."
+      );
+
+      return;
+    }
+
+    const reservedSeats = Number(data.seats_reserved) || 2;
+
     setInvitationFound(true);
     setWalkIn(false);
-    setMatchedGuest(foundGuest);
 
-    setGuestName(foundGuest);
+    setMatchedGuest(data.full_name);
+    setSeatsReserved(reservedSeats);
+
+    setGuestName(data.full_name);
+
+    /*
+      Start with 1 guest.
+      If invitation only has 1 seat, keep it at 1.
+    */
     setGuests("1");
+
     setStatus("");
   }
 
-  /* -------------------------------------------------
-     WALK-IN RSVP
-  ------------------------------------------------- */
+  /* =================================================
+     OPEN WALK-IN RSVP
+  ================================================= */
 
   function openWalkInRSVP() {
     setWalkIn(true);
     setInvitationFound(false);
+
     setMatchedGuest("");
-    setGuestName("");
     setSearchName("");
     setInvitationError("");
+
+    setSeatsReserved(2);
+
+    setGuestName("");
     setGuests("1");
+
     setStatus("");
   }
 
-  /* -------------------------------------------------
-     RSVP SUBMISSION
-  ------------------------------------------------- */
+  /* =================================================
+     SUBMIT RSVP
+  ================================================= */
 
   async function submitRSVP(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -111,19 +140,35 @@ export default function Home() {
     setStatus("");
 
     if (!invitationFound && !walkIn) {
-      setStatus("Please find your invitation or choose Walk-In RSVP.");
+      setStatus(
+        "Please find your invitation or choose the Walk-In RSVP option."
+      );
+
       setLoading(false);
       return;
     }
 
+    const numberOfGuests = Number(guests);
+
     /*
-      Invited guests are limited to 2 seats.
-      Walk-ins are also limited to 2 for this RSVP form.
+      Invited guests:
+      Use the exact number of seats from Supabase.
+
+      Walk-ins:
+      Maximum of 2 guests.
     */
 
-    if (Number(guests) > 2) {
-      setStatus("The maximum number of guests is 2.");
-      setGuests("2");
+    const maximumGuests = walkIn ? 2 : seatsReserved;
+
+    if (numberOfGuests > maximumGuests) {
+      setStatus(
+        `Your invitation allows a maximum of ${maximumGuests} ${
+          maximumGuests === 1 ? "guest" : "guests"
+        }.`
+      );
+
+      setGuests(String(maximumGuests));
+
       setLoading(false);
       return;
     }
@@ -135,31 +180,37 @@ export default function Home() {
     }
 
     /*
-      Keep the guest's name exactly as entered/recognized.
-      Walk-ins are marked in the message so they can be
-      identified in the existing Admin Panel.
+      Mark walk-in RSVPs in the message field.
+
+      We don't need another database column.
     */
 
     const finalMessage = walkIn
-      ? `[WALK-IN RSVP] ${message || ""}`.trim()
+      ? `[WALK-IN RSVP]${message ? ` ${message}` : ""}`
       : message || null;
 
     const { error } = await supabase.from("rsvps").insert({
-      guest_name: guestName,
-      email: email,
+      guest_name: guestName.trim(),
+      email: email.trim(),
       attendance: attendance,
-      guests: Number(guests),
-      message: finalMessage || null,
+      guests: numberOfGuests,
+      message: finalMessage,
     });
 
     if (error) {
       console.error(error);
+
       setStatus(`Unable to send RSVP: ${error.message}`);
+
       setLoading(false);
       return;
     }
 
     setStatus("Thank you! Your RSVP has been received. ❤️");
+
+    /*
+      Reset form
+    */
 
     setGuestName("");
     setEmail("");
@@ -170,9 +221,9 @@ export default function Home() {
     setLoading(false);
   }
 
-  /* -------------------------------------------------
+  /* =================================================
      GOOGLE CALENDAR
-  ------------------------------------------------- */
+  ================================================= */
 
   function addToGoogleCalendar() {
     const title = "Nezeal Ven & Shintal Khye Wedding";
@@ -195,9 +246,9 @@ export default function Home() {
     window.open(url, "_blank");
   }
 
-  /* -------------------------------------------------
-     DOWNLOAD CALENDAR
-  ------------------------------------------------- */
+  /* =================================================
+     DOWNLOAD CALENDAR FILE
+  ================================================= */
 
   function downloadCalendarFile() {
     const ics = `BEGIN:VCALENDAR
@@ -221,18 +272,21 @@ END:VCALENDAR`;
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "nezeal-shintal-wedding.ics";
 
     document.body.appendChild(link);
+
     link.click();
+
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
   }
 
   /* =================================================
-     OPENING INVITATION
+     OPENING INVITATION SCREEN
   ================================================= */
 
   if (!opened) {
@@ -303,7 +357,7 @@ END:VCALENDAR`;
   }
 
   /* =================================================
-     MAIN RSVP PAGE
+     MAIN PAGE
   ================================================= */
 
   return (
@@ -311,9 +365,9 @@ END:VCALENDAR`;
 
       <div className="max-w-3xl mx-auto">
 
-        {/* -------------------------------------------------
+        {/* =================================================
            HEADER
-        ------------------------------------------------- */}
+        ================================================= */}
 
         <section className="text-center mb-16">
 
@@ -332,7 +386,7 @@ END:VCALENDAR`;
         </section>
 
         {/* =================================================
-           FIND INVITATION / WALK-IN
+           INVITATION SEARCH
         ================================================= */}
 
         {!invitationFound && !walkIn && (
@@ -388,12 +442,15 @@ END:VCALENDAR`;
             <button
               type="button"
               onClick={findInvitation}
-              className="w-full mt-8 bg-[#29251f] text-white rounded-full py-5 tracking-[0.25em] uppercase text-sm hover:bg-[#3b352e] transition"
+              disabled={searching}
+              className="w-full mt-8 bg-[#29251f] text-white rounded-full py-5 tracking-[0.25em] uppercase text-sm hover:bg-[#3b352e] transition disabled:opacity-50"
             >
-              Find My Invitation
+              {searching ? "Checking..." : "Find My Invitation"}
             </button>
 
-            {/* WALK-IN OPTION */}
+            {/* =================================================
+               WALK-IN OPTION
+            ================================================= */}
 
             <div className="flex items-center gap-4 my-8">
 
@@ -456,11 +513,13 @@ END:VCALENDAR`;
               </p>
 
               <p className="font-serif text-4xl text-[#9a7654] mt-2">
-                2
+                {seatsReserved}
               </p>
 
               <p className="text-sm text-[#756d63] mt-1">
-                seats reserved for your invitation
+                {seatsReserved === 1
+                  ? "seat reserved for your invitation"
+                  : "seats reserved for your invitation"}
               </p>
 
             </div>
@@ -473,6 +532,8 @@ END:VCALENDAR`;
                 setGuestName("");
                 setSearchName("");
                 setInvitationError("");
+                setSeatsReserved(2);
+                setStatus("");
               }}
               className="block mx-auto mt-6 text-xs tracking-[0.15em] uppercase text-[#9a7654] underline underline-offset-4"
             >
@@ -557,8 +618,6 @@ END:VCALENDAR`;
 
           </div>
 
-          {/* Calendar Buttons */}
-
           <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
 
             <button
@@ -606,7 +665,9 @@ END:VCALENDAR`;
               <p className="mt-3 text-sm text-[#756d63]">
                 {walkIn
                   ? "Please provide your details below."
-                  : "Your invitation includes a maximum of 2 seats."}
+                  : `Your invitation includes a maximum of ${seatsReserved} ${
+                      seatsReserved === 1 ? "seat" : "seats"
+                    }.`}
               </p>
 
             </div>
@@ -654,11 +715,9 @@ END:VCALENDAR`;
 
               </div>
 
-              {/* ATTENDANCE + GUESTS */}
+              {/* ATTENDANCE + NUMBER OF GUESTS */}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
-
-                {/* Attendance */}
 
                 <div>
 
@@ -684,8 +743,6 @@ END:VCALENDAR`;
 
                 </div>
 
-                {/* Guests */}
-
                 <div>
 
                   <label className="block text-xs tracking-[0.25em] uppercase mb-3">
@@ -698,13 +755,23 @@ END:VCALENDAR`;
                     className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
                   >
 
-                    <option value="1">
-                      1 Guest
-                    </option>
-
-                    <option value="2">
-                      2 Guests
-                    </option>
+                    {Array.from(
+                      {
+                        length: Math.max(
+                          1,
+                          walkIn ? 2 : seatsReserved
+                        ),
+                      },
+                      (_, index) => index + 1
+                    ).map((number) => (
+                      <option
+                        key={number}
+                        value={String(number)}
+                      >
+                        {number}{" "}
+                        {number === 1 ? "Guest" : "Guests"}
+                      </option>
+                    ))}
 
                   </select>
 
@@ -717,15 +784,21 @@ END:VCALENDAR`;
               <div className="rounded-2xl bg-[#f8f5ef] p-5 text-center">
 
                 <p className="text-xs tracking-[0.2em] uppercase text-[#9a7654]">
-                  {walkIn ? "Walk-In Limit" : "Your Invitation"}
+                  {walkIn ? "Walk-In RSVP" : "Your Invitation"}
                 </p>
 
                 <p className="font-serif text-xl mt-2">
-                  Maximum 2 guests
+                  Maximum{" "}
+                  {walkIn ? 2 : seatsReserved}{" "}
+                  {walkIn
+                    ? "guests"
+                    : seatsReserved === 1
+                    ? "guest"
+                    : "guests"}
                 </p>
 
                 <p className="text-xs text-[#8a8177] mt-1">
-                  Please do not exceed the maximum number of seats.
+                  Please do not exceed your reserved seats.
                 </p>
 
               </div>
@@ -790,6 +863,7 @@ END:VCALENDAR`;
         </footer>
 
       </div>
+
     </main>
   );
 }
