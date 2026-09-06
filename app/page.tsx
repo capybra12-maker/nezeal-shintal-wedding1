@@ -52,9 +52,6 @@ export default function Home() {
     setNotFound(false);
 
     try {
-      /*
-       * First try to get invited_people.
-       */
       const { data, error: searchError } = await supabase
         .from("invited_guests")
         .select(
@@ -64,10 +61,6 @@ export default function Home() {
         .limit(1)
         .maybeSingle();
 
-      /*
-       * If invited_people does not exist,
-       * use the basic invitation columns.
-       */
       if (searchError) {
         const fallback = await supabase
           .from("invited_guests")
@@ -99,17 +92,11 @@ export default function Home() {
         return;
       }
 
-      /*
-       * No matching invitation.
-       */
       if (!data) {
         setNotFound(true);
         return;
       }
 
-      /*
-       * Get the people included in the invitation.
-       */
       const people =
         Array.isArray(data.invited_people) &&
         data.invited_people.length > 0
@@ -199,9 +186,6 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
-  /*
-   * LANDING PAGE
-   */
   if (step === "landing") {
     return (
       <main className="min-h-screen bg-[#f8f5ef] text-[#3d3a35]">
@@ -257,9 +241,6 @@ export default function Home() {
     );
   }
 
-  /*
-   * FIND YOUR INVITATION
-   */
   if (step === "search") {
     return (
       <main className="min-h-screen bg-[#f8f5ef] px-6 py-16 text-[#3d3a35]">
@@ -317,11 +298,6 @@ export default function Home() {
                 </p>
               )}
 
-              /*
-               * NAME NOT FOUND
-               *
-               * No Guest RSVP button.
-               */
               {notFound && (
                 <div className="mt-8 rounded-2xl border border-[#ded5c9] bg-white p-7 text-center">
                   <p className="font-serif text-2xl">
@@ -333,13 +309,8 @@ export default function Home() {
                   </p>
 
                   <div className="mt-5 text-sm text-[#817669]">
-                    <p>
-                      Shintal Khye
-                    </p>
-
-                    <p>
-                      Nezeal Ven
-                    </p>
+                    <p>Shintal Khye</p>
+                    <p>Nezeal Ven</p>
                   </div>
                 </div>
               )}
@@ -362,12 +333,6 @@ export default function Home() {
     );
   }
 
-  /*
-   * FOUND INVITATION
-   *
-   * There is NO RSVP form here.
-   * There is NO Continue button.
-   */
   if (
     step === "found" &&
     invitation
