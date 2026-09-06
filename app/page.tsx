@@ -4,7 +4,6 @@ import { FormEvent, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   Calendar,
-  Check,
   ChevronLeft,
   Clock,
   Heart,
@@ -13,12 +12,7 @@ import {
   Users,
 } from "lucide-react";
 
-type Step =
-  | "landing"
-  | "search"
-  | "found"
-  | "guest-rsvp"
-  | "success";
+type Step = "landing" | "search" | "found";
 
 type GuestInvitation = {
   full_name: string;
@@ -36,22 +30,6 @@ export default function Home() {
   const [invitation, setInvitation] =
     useState<GuestInvitation | null>(null);
 
-  const [guestName, setGuestName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-
-  // IMPORTANT:
-  // These values match the Supabase attendance check constraint.
-  const [attendance, setAttendance] =
-    useState("attending");
-
-  const [numberOfGuests, setNumberOfGuests] = useState(1);
-  const [guestNames, setGuestNames] =
-    useState<string[]>([""]);
-
-  const [message, setMessage] = useState("");
-
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   async function searchInvitation(e?: FormEvent) {
@@ -74,7 +52,9 @@ export default function Home() {
     setNotFound(false);
 
     try {
-      // First try with invited_people.
+      /*
+       * First try to get invited_people.
+       */
       const { data, error: searchError } = await supabase
         .from("invited_guests")
         .select(
@@ -84,8 +64,10 @@ export default function Home() {
         .limit(1)
         .maybeSingle();
 
-      // If invited_people does not exist yet,
-      // fall back to the basic columns.
+      /*
+       * If invited_people does not exist,
+       * use the basic invitation columns.
+       */
       if (searchError) {
         const fallback = await supabase
           .from("invited_guests")
@@ -105,38 +87,29 @@ export default function Home() {
 
         const found: GuestInvitation = {
           full_name: fallback.data.full_name,
-          seats_reserved:
-            fallback.data.seats_reserved,
+          seats_reserved: fallback.data.seats_reserved,
           invited_people: [
             fallback.data.full_name,
           ],
         };
 
         setInvitation(found);
-        setGuestName(found.full_name);
-        setNumberOfGuests(
-          found.seats_reserved
-        );
-
-        setGuestNames(
-          Array.from(
-            {
-              length: found.seats_reserved,
-            },
-            (_, index) =>
-              found.invited_people[index] || ""
-          )
-        );
-
         setStep("found");
+
         return;
       }
 
+      /*
+       * No matching invitation.
+       */
       if (!data) {
         setNotFound(true);
         return;
       }
 
+      /*
+       * Get the people included in the invitation.
+       */
       const people =
         Array.isArray(data.invited_people) &&
         data.invited_people.length > 0
@@ -145,27 +118,11 @@ export default function Home() {
 
       const found: GuestInvitation = {
         full_name: data.full_name,
-        seats_reserved:
-          data.seats_reserved,
+        seats_reserved: data.seats_reserved,
         invited_people: people,
       };
 
       setInvitation(found);
-      setGuestName(found.full_name);
-      setNumberOfGuests(
-        found.seats_reserved
-      );
-
-      setGuestNames(
-        Array.from(
-          {
-            length: found.seats_reserved,
-          },
-          (_, index) =>
-            people[index] || ""
-        )
-      );
-
       setStep("found");
     } catch (err) {
       console.error(err);
@@ -178,206 +135,12 @@ export default function Home() {
     }
   }
 
-  function updateNumberOfGuests(
-    value: number
-  ) {
-    const count = Math.max(
-      1,
-      Math.min(10, value)
-    );
-
-    setNumberOfGuests(count);
-
-    setGuestNames((current) => {
-      const updated = [...current];
-
-      while (updated.length < count) {
-        updated.push("");
-      }
-
-      return updated.slice(0, count);
-    });
-  }
-
-  function updateGuestName(
-    index: number,
-    value: string
-  ) {
-    setGuestNames((current) => {
-      const updated = [...current];
-      updated[index] = value;
-      return updated;
-    });
-  }
-
-  async function submitRSVP(e: FormEvent) {
-    e.preventDefault();
-
-    if (!supabase) {
-      setError(
-        "Database connection is not configured."
-      );
-      return;
-    }
-
-    if (!guestName.trim()) {
-      setError("Please enter your name.");
-      return;
-    }
-
-    if (attendance === "attending") {
-      const filledGuestNames =
-        guestNames.filter(
-          (name) => name.trim() !== ""
-        );
-
-      if (
-        filledGuestNames.length === 0
-      ) {
-        setError(
-          "Please enter at least one guest name."
-        );
-        return;
-      }
-    }
-
-    setSubmitting(true);
+  function resetToSearch() {
+    setStep("search");
+    setInvitation(null);
+    setSearchName("");
+    setNotFound(false);
     setError("");
-
-    try {
-      const rsvpData = {
-        guest_name: guestName.trim(),
-
-        email: email.trim(),
-
-        phone: phone.trim(),
-
-        // This now matches your database constraint.
-        attendance,
-
-        number_of_guests:
-          attendance === "attending"
-            ? numberOfGuests
-            : 0,
-
-        guest_names:
-          attendance === "attending"
-            ? guestNames
-                .filter(
-                  (name) =>
-                    name.trim() !== ""
-                )
-                .map((name) =>
-                  name.trim()
-                )
-            : [],
-
-        message: message.trim(),
-      };
-
-      const { error: rsvpError } =
-        await supabase
-          .from("rsvps")
-          .insert(rsvpData);
-
-      if (rsvpError) {
-        console.error(
-          "RSVP error:",
-          rsvpError
-        );
-
-        throw new Error(
-          rsvpError.message ||
-            "Unable to save your RSVP."
-        );
-      }
-
-      // If the person was not already in the
-      // invitation list, add them so they can
-      // search their name later.
-      const isExistingInvitation =
-        invitation !== null &&
-        invitation.full_name
-          .toLowerCase() ===
-          guestName
-            .trim()
-            .toLowerCase();
-
-      if (!isExistingInvitation) {
-        const people =
-          attendance === "attending"
-            ? guestNames
-                .filter(
-                  (name) =>
-                    name.trim() !== ""
-                )
-                .map((name) =>
-                  name.trim()
-                )
-            : [guestName.trim()];
-
-        // Try including invited_people.
-        const {
-          error: guestInsertError,
-        } = await supabase
-          .from("invited_guests")
-          .insert({
-            full_name:
-              guestName.trim(),
-
-            seats_reserved:
-              attendance ===
-              "attending"
-                ? numberOfGuests
-                : 0,
-
-            invited_people: people,
-          });
-
-        // If invited_people is not available,
-        // save the basic guest record instead.
-        if (guestInsertError) {
-          console.warn(
-            "Could not save invited_people. Trying basic guest record.",
-            guestInsertError
-          );
-
-          const {
-            error: fallbackGuestError,
-          } = await supabase
-            .from("invited_guests")
-            .insert({
-              full_name:
-                guestName.trim(),
-
-              seats_reserved:
-                attendance ===
-                "attending"
-                  ? numberOfGuests
-                  : 0,
-            });
-
-          if (fallbackGuestError) {
-            console.error(
-              "Guest insert error:",
-              fallbackGuestError
-            );
-          }
-        }
-      }
-
-      setStep("success");
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong. Please try again."
-      );
-    } finally {
-      setSubmitting(false);
-    }
   }
 
   function addToGoogleCalendar() {
@@ -419,18 +182,13 @@ export default function Home() {
       `END:VEVENT\r\n` +
       `END:VCALENDAR`;
 
-    const blob = new Blob(
-      [calendar],
-      {
-        type: "text/calendar",
-      }
-    );
+    const blob = new Blob([calendar], {
+      type: "text/calendar",
+    });
 
-    const url =
-      URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
 
-    const link =
-      document.createElement("a");
+    const link = document.createElement("a");
 
     link.href = url;
     link.download =
@@ -441,32 +199,8 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
-  function resetToSearch() {
-    setStep("search");
-    setInvitation(null);
-    setSearchName("");
-    setNotFound(false);
-    setError("");
-  }
-
-  function resetRSVP() {
-    setGuestName("");
-    setEmail("");
-    setPhone("");
-
-    // Reset to a valid database value.
-    setAttendance("attending");
-
-    setNumberOfGuests(1);
-    setGuestNames([""]);
-    setMessage("");
-    setError("");
-    setInvitation(null);
-    setSearchName("");
-  }
-
   /*
-   * LANDING
+   * LANDING PAGE
    */
   if (step === "landing") {
     return (
@@ -524,7 +258,7 @@ export default function Home() {
   }
 
   /*
-   * SEARCH
+   * FIND YOUR INVITATION
    */
   if (step === "search") {
     return (
@@ -565,11 +299,13 @@ export default function Home() {
 
                 <input
                   value={searchName}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setSearchName(
                       e.target.value
-                    )
-                  }
+                    );
+                    setNotFound(false);
+                    setError("");
+                  }}
                   placeholder="Enter your name"
                   className="w-full rounded-full border border-[#d8d0c5] bg-white px-14 py-4 outline-none transition focus:border-[#8d8173]"
                 />
@@ -581,49 +317,44 @@ export default function Home() {
                 </p>
               )}
 
+              /*
+               * NAME NOT FOUND
+               *
+               * No Guest RSVP button.
+               */
               {notFound && (
                 <div className="mt-8 rounded-2xl border border-[#ded5c9] bg-white p-7 text-center">
                   <p className="font-serif text-2xl">
-                    We couldn't find your invitation.
+                    Can't find your name?
                   </p>
 
                   <p className="mt-3 text-sm leading-6 text-[#777067]">
-                    You can still RSVP as a guest below.
+                    Please contact the couple for assistance with your invitation.
                   </p>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetRSVP();
+                  <div className="mt-5 text-sm text-[#817669]">
+                    <p>
+                      Shintal Khye
+                    </p>
 
-                      setGuestName(
-                        searchName.trim()
-                      );
-
-                      setStep(
-                        "guest-rsvp"
-                      );
-                    }}
-                    className="mt-6 rounded-full bg-[#4b4741] px-8 py-3 text-sm uppercase tracking-[0.15em] text-white"
-                  >
-                    Guest RSVP
-                  </button>
+                    <p>
+                      Nezeal Ven
+                    </p>
+                  </div>
                 </div>
               )}
 
-              {!notFound && (
-                <button
-                  type="submit"
-                  disabled={searching}
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-[#4b4741] px-8 py-4 text-sm uppercase tracking-[0.18em] text-white disabled:opacity-60"
-                >
-                  <Search size={17} />
+              <button
+                type="submit"
+                disabled={searching}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-[#4b4741] px-8 py-4 text-sm uppercase tracking-[0.18em] text-white transition hover:bg-[#35322e] disabled:opacity-60"
+              >
+                <Search size={17} />
 
-                  {searching
-                    ? "Searching..."
-                    : "Search Invitation"}
-                </button>
-              )}
+                {searching
+                  ? "Searching..."
+                  : "Search Invitation"}
+              </button>
             </form>
           </div>
         </div>
@@ -634,8 +365,8 @@ export default function Home() {
   /*
    * FOUND INVITATION
    *
-   * IMPORTANT:
-   * There is NO Continue to RSVP button here.
+   * There is NO RSVP form here.
+   * There is NO Continue button.
    */
   if (
     step === "found" &&
@@ -806,356 +537,6 @@ export default function Home() {
               </button>
             </div>
           </div>
-        </div>
-      </main>
-    );
-  }
-
-  /*
-   * GUEST RSVP
-   */
-  if (step === "guest-rsvp") {
-    return (
-      <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
-        <div className="mx-auto max-w-2xl">
-          <button
-            onClick={resetToSearch}
-            className="mb-10 flex items-center gap-2 text-sm text-[#82786c]"
-          >
-            <ChevronLeft size={16} />
-            Search again
-          </button>
-
-          <div className="rounded-[2rem] border border-[#ded6ca] bg-white p-8 shadow-sm md:p-12">
-            <div className="text-center">
-              <p className="text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
-                Guest RSVP
-              </p>
-
-              <h1 className="mt-4 font-serif text-4xl">
-                We'd love to hear from you
-              </h1>
-
-              <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-[#777067]">
-                We couldn't find your invitation, but you are still welcome to RSVP as a guest.
-              </p>
-            </div>
-
-            <form
-              onSubmit={submitRSVP}
-              className="mt-10 space-y-7"
-            >
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Your Name *
-                </label>
-
-                <input
-                  required
-                  value={guestName}
-                  onChange={(e) =>
-                    setGuestName(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Full name"
-                  className="w-full rounded-xl border border-[#d8d0c5] bg-white px-4 py-3 outline-none focus:border-[#8d8173]"
-                />
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Email
-                  </label>
-
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) =>
-                      setEmail(
-                        e.target.value
-                      )
-                    }
-                    placeholder="you@example.com"
-                    className="w-full rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Phone
-                  </label>
-
-                  <input
-                    value={phone}
-                    onChange={(e) =>
-                      setPhone(
-                        e.target.value
-                      )
-                    }
-                    placeholder="Contact number"
-                    className="w-full rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-3 block text-sm font-medium">
-                  Will you be joining us? *
-                </label>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAttendance(
-                        "attending"
-                      )
-                    }
-                    className={`rounded-xl border p-4 text-left ${
-                      attendance ===
-                      "attending"
-                        ? "border-[#625b52] bg-[#f8f5ef]"
-                        : "border-[#ddd5ca]"
-                    }`}
-                  >
-                    <p className="font-medium">
-                      Yes, I'll be there
-                    </p>
-
-                    <p className="mt-1 text-xs text-[#777067]">
-                      We look forward to seeing you.
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAttendance(
-                        "Regretfully declining"
-                      )
-                    }
-                    className={`rounded-xl border p-4 text-left ${
-                      attendance ===
-                      "Regretfully declining"
-                        ? "border-[#625b52] bg-[#f8f5ef]"
-                        : "border-[#ddd5ca]"
-                    }`}
-                  >
-                    <p className="font-medium">
-                      Sorry, I can't make it
-                    </p>
-
-                    <p className="mt-1 text-xs text-[#777067]">
-                      We'll miss celebrating with you.
-                    </p>
-                  </button>
-                </div>
-              </div>
-
-              {attendance ===
-                "attending" && (
-                <>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      Number of Guests
-                    </label>
-
-                    <select
-                      value={
-                        numberOfGuests
-                      }
-                      onChange={(e) =>
-                        updateNumberOfGuests(
-                          Number(
-                            e.target.value
-                          )
-                        )
-                      }
-                      className="w-full rounded-xl border border-[#d8d0c5] bg-white px-4 py-3 outline-none"
-                    >
-                      {Array.from(
-                        {
-                          length: 10,
-                        },
-                        (
-                          _,
-                          index
-                        ) =>
-                          index + 1
-                      ).map(
-                        (number) => (
-                          <option
-                            key={
-                              number
-                            }
-                            value={
-                              number
-                            }
-                          >
-                            {number}{" "}
-                            {number ===
-                            1
-                              ? "Guest"
-                              : "Guests"}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-3 block text-sm font-medium">
-                      Who is joining?
-                    </label>
-
-                    <div className="space-y-3">
-                      {guestNames.map(
-                        (
-                          name,
-                          index
-                        ) => (
-                          <input
-                            key={
-                              index
-                            }
-                            required
-                            value={
-                              name
-                            }
-                            onChange={(
-                              e
-                            ) =>
-                              updateGuestName(
-                                index,
-                                e
-                                  .target
-                                  .value
-                              )
-                            }
-                            placeholder={`Guest ${
-                              index +
-                              1
-                            } name`}
-                            className="w-full rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
-                          />
-                        )
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Message
-                </label>
-
-                <textarea
-                  value={message}
-                  onChange={(e) =>
-                    setMessage(
-                      e.target.value
-                    )
-                  }
-                  rows={4}
-                  placeholder="Leave a message for the couple..."
-                  className="w-full resize-none rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
-                />
-              </div>
-
-              {error && (
-                <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#4b4741] px-8 py-4 text-sm uppercase tracking-[0.18em] text-white transition hover:bg-[#35322e] disabled:opacity-60"
-              >
-                {submitting ? (
-                  "Submitting..."
-                ) : (
-                  <>
-                    <Check size={17} />
-                    Submit RSVP
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  /*
-   * SUCCESS
-   */
-  if (step === "success") {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f8f5ef] px-6 py-16 text-[#3d3a35]">
-        <div className="w-full max-w-xl rounded-[2rem] border border-[#ded6ca] bg-white p-10 text-center shadow-sm md:p-14">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#f0ece5]">
-            <Check size={30} />
-          </div>
-
-          <p className="mt-8 text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
-            RSVP Received
-          </p>
-
-          <h1 className="mt-4 font-serif text-4xl md:text-5xl">
-            Thank You, {guestName}!
-          </h1>
-
-          <p className="mx-auto mt-5 max-w-md leading-7 text-[#777067]">
-            Your RSVP has been successfully recorded. We are so happy to hear from you and look forward to celebrating together.
-          </p>
-
-          <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6">
-            <p className="font-serif text-2xl">
-              April 23, 2026
-            </p>
-
-            <p className="mt-2 text-sm text-[#777067]">
-              4:00 PM · E&J Grand Pavilion
-            </p>
-          </div>
-
-          <div className="mt-8 grid gap-3 md:grid-cols-2">
-            <button
-              onClick={
-                addToGoogleCalendar
-              }
-              className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
-            >
-              <Calendar size={17} />
-              Google Calendar
-            </button>
-
-            <button
-              onClick={
-                downloadCalendar
-              }
-              className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
-            >
-              <Calendar size={17} />
-              Download Calendar
-            </button>
-          </div>
-
-          <button
-            onClick={() => {
-              resetRSVP();
-              setStep("search");
-            }}
-            className="mt-8 text-sm text-[#817669] underline underline-offset-4"
-          >
-            Search invitation again
-          </button>
         </div>
       </main>
     );
