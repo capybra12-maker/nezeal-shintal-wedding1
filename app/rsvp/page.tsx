@@ -9,6 +9,7 @@ import {
   Minus,
   Plus,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function RSVPPage() {
   const [name, setName] = useState("");
@@ -18,6 +19,9 @@ export default function RSVPPage() {
   const [guestCount, setGuestCount] = useState(1);
   const [guestNames, setGuestNames] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
   function updateGuestCount(count: number) {
@@ -46,22 +50,75 @@ export default function RSVPPage() {
     });
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    if (!name.trim() || !attendance) {
+    setError("");
+
+    if (!name.trim()) {
+      setError("Please enter your name.");
       return;
     }
 
-    setSubmitted(true);
+    if (!attendance) {
+      setError("Please select whether you will be joining us.");
+      return;
+    }
 
-    console.log({
-      name,
-      attendance,
-      guestCount,
-      guestNames,
-      message,
-    });
+    if (attendance === "attending") {
+      const missingGuest = guestNames.some(
+        (guest) => !guest.trim()
+      );
+
+      if (missingGuest) {
+        setError("Please enter the name of every guest attending.");
+        return;
+      }
+    }
+
+    if (!supabase) {
+      setError("Database connection is not configured.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const additionalGuests =
+        attendance === "attending"
+          ? guestNames
+              .map((guest) => guest.trim())
+              .filter(Boolean)
+          : [];
+
+      const { error: insertError } = await supabase
+        .from("rsvps")
+        .insert({
+          guest_name: name.trim(),
+          attendance,
+          guest_count:
+            attendance === "attending" ? guestCount : 0,
+          additional_guests: additionalGuests,
+          message: message.trim() || null,
+        });
+
+      if (insertError) {
+        console.error(insertError);
+        setError(
+          "We couldn't submit your RSVP. Please try again."
+        );
+        return;
+      }
+
+      setSubmitted(true);
+    } catch (err) {
+      console.error(err);
+      setError(
+        "Something went wrong. Please try again."
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function addToGoogleCalendar() {
@@ -71,7 +128,9 @@ export default function RSVPPage() {
     const url =
       "https://calendar.google.com/calendar/render?action=TEMPLATE" +
       "&text=" +
-      encodeURIComponent("Nezeal Ven & Shintal Khye Wedding") +
+      encodeURIComponent(
+        "Nezeal Ven & Shintal Khye Wedding"
+      ) +
       "&dates=" +
       start +
       "/" +
@@ -81,7 +140,9 @@ export default function RSVPPage() {
         "We are getting married! We would love to celebrate this special day with you."
       ) +
       "&location=" +
-      encodeURIComponent("E&J Grand Pavilion, DC, Bukidnon");
+      encodeURIComponent(
+        "E&J Grand Pavilion, DC, Bukidnon"
+      );
 
     window.open(url, "_blank");
   }
@@ -124,6 +185,7 @@ export default function RSVPPage() {
       <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
         <div className="mx-auto flex min-h-[80vh] max-w-2xl items-center justify-center">
           <div className="w-full rounded-[2rem] border border-[#ded6ca] bg-white p-8 text-center shadow-sm md:p-14">
+
             <Heart
               size={38}
               strokeWidth={1}
@@ -155,6 +217,7 @@ export default function RSVPPage() {
             </div>
 
             <div className="mt-8 grid gap-3 md:grid-cols-2">
+
               <button
                 type="button"
                 onClick={addToGoogleCalendar}
@@ -172,6 +235,7 @@ export default function RSVPPage() {
                 <Calendar size={17} />
                 Download Calendar
               </button>
+
             </div>
           </div>
         </div>
@@ -192,8 +256,9 @@ export default function RSVPPage() {
           Back
         </button>
 
-        {/* Wedding Header */}
+        {/* Header */}
         <div className="text-center">
+
           <p className="mb-5 text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
             Your Response
           </p>
@@ -212,7 +277,9 @@ export default function RSVPPage() {
 
           <h1 className="font-serif text-5xl leading-tight md:text-7xl">
             Nezeal Ven
-            <span className="mx-3 text-[#a99b89]">&amp;</span>
+            <span className="mx-3 text-[#a99b89]">
+              &amp;
+            </span>
             Shintal Khye
           </h1>
 
@@ -225,12 +292,14 @@ export default function RSVPPage() {
           <p className="mt-2 text-[#82786c]">
             4:00 PM · E&amp;J Grand Pavilion
           </p>
+
         </div>
 
-        {/* RSVP FORM */}
+        {/* Form */}
         <div className="mt-12 rounded-[2rem] border border-[#ded6ca] bg-white p-7 shadow-sm md:p-12">
 
           <div className="text-center">
+
             <p className="text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
               Kindly Respond
             </p>
@@ -242,12 +311,17 @@ export default function RSVPPage() {
             <p className="mx-auto mt-4 max-w-md leading-7 text-[#777067]">
               We would love to celebrate this special day with you.
             </p>
+
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-10">
+          <form
+            onSubmit={handleSubmit}
+            className="mt-10"
+          >
 
-            {/* Main Guest */}
+            {/* Name */}
             <div>
+
               <label
                 htmlFor="name"
                 className="mb-2 block text-xs uppercase tracking-[0.25em] text-[#9b9185]"
@@ -259,23 +333,32 @@ export default function RSVPPage() {
                 id="name"
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setError("");
+                }}
                 placeholder="Enter your full name"
                 required
                 className="w-full rounded-full border border-[#d8d0c5] bg-white px-6 py-4 outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
               />
+
             </div>
 
             {/* Attendance */}
             <div className="mt-8">
+
               <p className="mb-4 text-xs uppercase tracking-[0.25em] text-[#9b9185]">
                 Will You Be Joining Us?
               </p>
 
               <div className="grid gap-3 md:grid-cols-2">
+
                 <button
                   type="button"
-                  onClick={() => setAttendance("attending")}
+                  onClick={() => {
+                    setAttendance("attending");
+                    setError("");
+                  }}
                   className={`rounded-full border px-5 py-4 text-sm transition ${
                     attendance === "attending"
                       ? "border-[#4b4741] bg-[#4b4741] text-white"
@@ -290,6 +373,7 @@ export default function RSVPPage() {
                   onClick={() => {
                     setAttendance("not_attending");
                     updateGuestCount(1);
+                    setError("");
                   }}
                   className={`rounded-full border px-5 py-4 text-sm transition ${
                     attendance === "not_attending"
@@ -299,10 +383,11 @@ export default function RSVPPage() {
                 >
                   Regretfully Declines
                 </button>
+
               </div>
             </div>
 
-            {/* Guests */}
+            {/* Guest Count */}
             {attendance === "attending" && (
               <div className="mt-8">
 
@@ -327,10 +412,11 @@ export default function RSVPPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        updateGuestCount(guestCount - 1)
+                        updateGuestCount(
+                          guestCount - 1
+                        )
                       }
                       className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white"
-                      aria-label="Decrease guest count"
                     >
                       <Minus size={16} />
                     </button>
@@ -342,18 +428,20 @@ export default function RSVPPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        updateGuestCount(guestCount + 1)
+                        updateGuestCount(
+                          guestCount + 1
+                        )
                       }
                       className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white"
-                      aria-label="Increase guest count"
                     >
                       <Plus size={16} />
                     </button>
 
                   </div>
+
                 </div>
 
-                {/* Additional Guest Names */}
+                {/* Additional Guests */}
                 {guestCount > 1 && (
                   <div className="mt-6 space-y-4">
 
@@ -361,39 +449,47 @@ export default function RSVPPage() {
                       Additional Guest Names
                     </p>
 
-                    {guestNames.map((guestName, index) => (
-                      <div key={index}>
-                        <label
-                          htmlFor={`guest-${index}`}
-                          className="mb-2 block text-sm text-[#777067]"
-                        >
-                          Guest {index + 1}
-                        </label>
+                    {guestNames.map(
+                      (guestName, index) => (
+                        <div key={index}>
 
-                        <input
-                          id={`guest-${index}`}
-                          type="text"
-                          value={guestName}
-                          onChange={(e) =>
-                            updateGuestName(
-                              index,
-                              e.target.value
-                            )
-                          }
-                          placeholder={`Enter guest ${index + 1} name`}
-                          required
-                          className="w-full rounded-full border border-[#d8d0c5] bg-white px-6 py-4 outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
-                        />
-                      </div>
-                    ))}
+                          <label
+                            htmlFor={`guest-${index}`}
+                            className="mb-2 block text-sm text-[#777067]"
+                          >
+                            Guest {index + 1}
+                          </label>
+
+                          <input
+                            id={`guest-${index}`}
+                            type="text"
+                            value={guestName}
+                            onChange={(e) =>
+                              updateGuestName(
+                                index,
+                                e.target.value
+                              )
+                            }
+                            placeholder={`Enter guest ${
+                              index + 1
+                            } name`}
+                            required
+                            className="w-full rounded-full border border-[#d8d0c5] bg-white px-6 py-4 outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
+                          />
+
+                        </div>
+                      )
+                    )}
 
                   </div>
                 )}
+
               </div>
             )}
 
             {/* Message */}
             <div className="mt-8">
+
               <label
                 htmlFor="message"
                 className="mb-2 block text-xs uppercase tracking-[0.25em] text-[#9b9185]"
@@ -404,15 +500,26 @@ export default function RSVPPage() {
               <textarea
                 id="message"
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={(e) =>
+                  setMessage(e.target.value)
+                }
                 placeholder="Leave a message for Nezeal & Shintal..."
                 rows={4}
                 className="w-full resize-none rounded-2xl border border-[#d8d0c5] bg-white px-5 py-4 outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
               />
+
             </div>
+
+            {/* Error */}
+            {error && (
+              <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-center text-sm text-red-700">
+                {error}
+              </div>
+            )}
 
             {/* Deadline */}
             <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6 text-center">
+
               <p className="font-serif text-2xl">
                 We can't wait to celebrate with you.
               </p>
@@ -420,16 +527,24 @@ export default function RSVPPage() {
               <p className="mt-3 text-sm text-[#777067]">
                 RSVP deadline: April 5, 2026
               </p>
+
             </div>
 
             {/* Submit */}
             <button
               type="submit"
-              disabled={!name.trim() || !attendance}
+              disabled={
+                submitting ||
+                !name.trim() ||
+                !attendance
+              }
               className="mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-[#4b4741] px-8 py-4 text-sm uppercase tracking-[0.18em] text-white transition hover:bg-[#35322e] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Check size={17} />
-              Submit RSVP
+
+              {submitting
+                ? "Submitting..."
+                : "Submit RSVP"}
             </button>
 
           </form>
@@ -468,6 +583,7 @@ export default function RSVPPage() {
             </button>
 
           </div>
+
         </div>
 
       </div>
