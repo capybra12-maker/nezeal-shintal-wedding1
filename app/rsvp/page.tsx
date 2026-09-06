@@ -1,13 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import {
-  Check,
-  ChevronLeft,
-  Heart,
-  Minus,
-  Plus,
-} from "lucide-react";
+import { Check, ChevronLeft, Heart, Minus, Plus } from "lucide-react";
 
 export default function RSVPPage() {
   const [name, setName] = useState("");
@@ -16,17 +10,58 @@ export default function RSVPPage() {
   >("");
   const [guestCount, setGuestCount] = useState(1);
   const [message, setMessage] = useState("");
+  const [submitted, setSubmitted] = useState(false);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    // Supabase connection will be added later.
-    console.log({
-      name,
-      attendance,
-      guestCount,
-      message,
-    });
+    if (!name.trim()) return;
+    if (!attendance) return;
+
+    setSubmitted(true);
+  }
+
+  if (submitted) {
+    return (
+      <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
+        <div className="mx-auto flex min-h-[80vh] max-w-2xl items-center justify-center">
+          <div className="w-full rounded-[2rem] border border-[#ded6ca] bg-white p-8 text-center shadow-sm md:p-14">
+            <Heart
+              size={38}
+              strokeWidth={1}
+              className="mx-auto text-[#9b8d7b]"
+            />
+
+            <p className="mt-6 text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
+              Thank You
+            </p>
+
+            <h1 className="mt-4 font-serif text-4xl md:text-5xl">
+              {attendance === "attending"
+                ? "We can't wait to see you."
+                : "Thank you for letting us know."}
+            </h1>
+
+            <div className="mx-auto my-7 h-px w-20 bg-[#c9bdad]" />
+
+            <p className="mx-auto max-w-md leading-7 text-[#777067]">
+              Your RSVP has been received. We are so grateful to have you
+              celebrate this special day with us.
+            </p>
+
+            <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6">
+              <p className="font-serif text-2xl">
+                Nezeal Ven &amp; Shintal Khye
+              </p>
+
+              <p className="mt-3 text-sm text-[#777067]">
+                April 23, 2026 · 4:00 PM
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -43,56 +78,64 @@ export default function RSVPPage() {
           Back
         </button>
 
-        {/* Header */}
+        {/* Wedding Header */}
         <div className="text-center">
 
-          <p className="mb-4 text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
+          <p className="mb-5 text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
             Your Response
           </p>
 
-          <div className="mb-5 flex justify-center">
+          <div className="mb-6 flex justify-center">
             <Heart
-              size={28}
+              size={32}
               strokeWidth={1}
               className="text-[#9b8d7b]"
             />
           </div>
 
-          <h1 className="font-serif leading-[0.95] text-[#3d3a35]">
-
-            <span className="block text-6xl md:text-8xl">
-              Nezeal Ven
-            </span>
-
-            <span className="my-3 block text-4xl text-[#a99b89] md:text-5xl">
-              &amp;
-            </span>
-
-            <span className="block text-6xl md:text-8xl">
-              Shintal Khye
-            </span>
-
-          </h1>
-
-          <div className="mx-auto my-8 h-px w-20 bg-[#c9bdad]" />
-
-          <p className="font-serif text-2xl italic text-[#817669]">
-            Kindly RSVP
+          <p className="mb-4 font-serif text-lg italic text-[#817669]">
+            We are getting married
           </p>
 
-          <p className="mx-auto mt-4 max-w-md leading-7 text-[#777067]">
-            We would be delighted to celebrate this special day with you.
-            Please let us know if you will be joining us.
+          <h1 className="font-serif text-5xl leading-tight md:text-7xl">
+            Nezeal Ven
+            <span className="mx-3 text-[#a99b89]">&amp;</span>
+            Shintal Khye
+          </h1>
+
+          <div className="mx-auto my-8 h-px w-24 bg-[#b9ad9d]" />
+
+          <p className="text-lg tracking-wide">
+            April 23, 2026
+          </p>
+
+          <p className="mt-2 text-[#82786c]">
+            4:00 PM · E&amp;J Grand Pavilion
           </p>
 
         </div>
 
-        {/* RSVP Card */}
-        <div className="mt-10 rounded-[2rem] border border-[#ded6ca] bg-white p-7 shadow-sm md:p-12">
+        {/* RSVP FORM */}
+        <div className="mt-12 rounded-[2rem] border border-[#ded6ca] bg-white p-7 shadow-sm md:p-12">
 
-          <form onSubmit={handleSubmit}>
+          <div className="text-center">
+            <p className="text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
+              Kindly Respond
+            </p>
 
-            {/* Name */}
+            <h2 className="mt-3 font-serif text-3xl md:text-4xl">
+              RSVP
+            </h2>
+
+            <p className="mx-auto mt-4 max-w-md leading-7 text-[#777067]">
+              We would love to celebrate this special day with you.
+              Please let us know if you will be joining us.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="mt-10">
+
+            {/* NAME */}
             <div>
               <label
                 htmlFor="name"
@@ -106,13 +149,13 @@ export default function RSVPPage() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
+                placeholder="Enter your full name"
                 required
-                className="w-full rounded-full border border-[#d8d0c5] bg-[#fffdfa] px-6 py-4 text-[#3d3a35] outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
+                className="w-full rounded-full border border-[#d8d0c5] bg-white px-6 py-4 text-[#3d3a35] outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
               />
             </div>
 
-            {/* Attendance */}
+            {/* ATTENDANCE */}
             <div className="mt-8">
 
               <p className="mb-4 text-xs uppercase tracking-[0.25em] text-[#9b9185]">
@@ -135,7 +178,10 @@ export default function RSVPPage() {
 
                 <button
                   type="button"
-                  onClick={() => setAttendance("not_attending")}
+                  onClick={() => {
+                    setAttendance("not_attending");
+                    setGuestCount(1);
+                  }}
                   className={`rounded-full border px-5 py-4 text-sm transition ${
                     attendance === "not_attending"
                       ? "border-[#4b4741] bg-[#4b4741] text-white"
@@ -148,63 +194,65 @@ export default function RSVPPage() {
               </div>
             </div>
 
-            {/* Guest Count */}
-            <div className="mt-8">
+            {/* GUEST COUNT */}
+            {attendance === "attending" && (
+              <div className="mt-8">
 
-              <p className="mb-4 text-xs uppercase tracking-[0.25em] text-[#9b9185]">
-                Number of Guests
-              </p>
+                <p className="mb-4 text-xs uppercase tracking-[0.25em] text-[#9b9185]">
+                  Number of Guests
+                </p>
 
-              <div className="flex items-center justify-between rounded-2xl bg-[#f8f5ef] px-5 py-4">
+                <div className="flex items-center justify-between rounded-2xl bg-[#f8f5ef] px-5 py-5">
 
-                <div>
-                  <p className="font-serif text-xl">
-                    Guests Attending
-                  </p>
+                  <div>
+                    <p className="font-serif text-xl">
+                      Guests Attending
+                    </p>
 
-                  <p className="mt-1 text-sm text-[#777067]">
-                    Including yourself
-                  </p>
+                    <p className="mt-1 text-sm text-[#777067]">
+                      Including yourself
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setGuestCount((count) =>
+                          Math.max(1, count - 1)
+                        )
+                      }
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white transition hover:bg-[#eee9e1]"
+                      aria-label="Decrease guest count"
+                    >
+                      <Minus size={16} />
+                    </button>
+
+                    <span className="w-8 text-center text-lg">
+                      {guestCount}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setGuestCount((count) =>
+                          Math.min(10, count + 1)
+                        )
+                      }
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white transition hover:bg-[#eee9e1]"
+                      aria-label="Increase guest count"
+                    >
+                      <Plus size={16} />
+                    </button>
+
+                  </div>
+
                 </div>
-
-                <div className="flex items-center gap-3">
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setGuestCount((count) =>
-                        Math.max(1, count - 1)
-                      )
-                    }
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white transition hover:bg-[#eee9e1]"
-                    aria-label="Decrease guest count"
-                  >
-                    <Minus size={16} />
-                  </button>
-
-                  <span className="w-8 text-center text-lg">
-                    {guestCount}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setGuestCount((count) =>
-                        Math.min(10, count + 1)
-                      )
-                    }
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white transition hover:bg-[#eee9e1]"
-                    aria-label="Increase guest count"
-                  >
-                    <Plus size={16} />
-                  </button>
-
-                </div>
-
               </div>
-            </div>
+            )}
 
-            {/* Message */}
+            {/* MESSAGE */}
             <div className="mt-8">
 
               <label
@@ -220,12 +268,12 @@ export default function RSVPPage() {
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Leave a message for Nezeal & Shintal..."
                 rows={5}
-                className="w-full resize-none rounded-2xl border border-[#d8d0c5] bg-[#fffdfa] px-5 py-4 text-[#3d3a35] outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
+                className="w-full resize-none rounded-2xl border border-[#d8d0c5] bg-white px-5 py-4 text-[#3d3a35] outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
               />
 
             </div>
 
-            {/* Deadline */}
+            {/* DEADLINE */}
             <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6 text-center">
 
               <p className="font-serif text-2xl">
@@ -238,35 +286,36 @@ export default function RSVPPage() {
 
             </div>
 
-            {/* Submit */}
+            {/* SUBMIT */}
             <button
               type="submit"
-              disabled={!attendance}
+              disabled={!attendance || !name.trim()}
               className="mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-[#4b4741] px-8 py-4 text-sm uppercase tracking-[0.18em] text-white transition hover:bg-[#35322e] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Check size={17} />
               Submit RSVP
             </button>
 
-            {/* Can't find name */}
-            <div className="mt-8 rounded-2xl border border-[#ded5c9] bg-white p-6 text-center">
+          </form>
 
-              <p className="font-serif text-2xl">
-                Can't find your name?
-              </p>
+          {/* NAME NOT FOUND */}
+          <div className="mt-8 rounded-2xl border border-[#ded5c9] bg-[#fffdfa] p-6 text-center">
 
-              <p className="mt-3 text-sm leading-6 text-[#777067]">
-                Please contact the couple for assistance with your invitation.
-              </p>
+            <p className="font-serif text-2xl">
+              Can't find your name?
+            </p>
 
-              <div className="mt-5 text-sm text-[#817669]">
-                <p>Shintal Khye</p>
-                <p>Nezeal Ven</p>
-              </div>
+            <p className="mt-3 text-sm leading-6 text-[#777067]">
+              Please contact the couple for assistance with your invitation.
+            </p>
 
+            <div className="mt-5 text-sm text-[#817669]">
+              <p>Shintal Khye</p>
+              <p>Nezeal Ven</p>
             </div>
 
-          </form>
+          </div>
+
         </div>
 
         {/* Footer */}
