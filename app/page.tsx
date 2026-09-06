@@ -3,8 +3,48 @@
 import { FormEvent, useState } from "react";
 import { supabase } from "../lib/supabase";
 
+/*
+  =====================================================
+  INVITED GUEST LIST
+  =====================================================
+
+  Add your invited names here.
+
+  Each name automatically has 2 seats reserved.
+
+  Example:
+  "John Doe",
+  "Maria Santos",
+
+  You can add as many names as you need.
+*/
+
+const invitedGuests = [
+  "John Doe",
+  "Jane Smith",
+  "Michael Santos",
+  "Sarah Garcia",
+];
+
 export default function Home() {
+  /* -------------------------------------------------
+     OPENING INVITATION
+  ------------------------------------------------- */
+
   const [opened, setOpened] = useState(false);
+
+  /* -------------------------------------------------
+     INVITATION SEARCH
+  ------------------------------------------------- */
+
+  const [searchName, setSearchName] = useState("");
+  const [invitationFound, setInvitationFound] = useState(false);
+  const [invitationError, setInvitationError] = useState("");
+  const [matchedGuest, setMatchedGuest] = useState("");
+
+  /* -------------------------------------------------
+     RSVP
+  ------------------------------------------------- */
 
   const [guestName, setGuestName] = useState("");
   const [email, setEmail] = useState("");
@@ -15,11 +55,61 @@ export default function Home() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
+  /* -------------------------------------------------
+     FIND INVITATION
+  ------------------------------------------------- */
+
+  function findInvitation() {
+    const search = searchName.trim().toLowerCase();
+
+    setInvitationError("");
+    setInvitationFound(false);
+    setMatchedGuest("");
+
+    if (!search) {
+      setInvitationError("Please enter your name.");
+      return;
+    }
+
+    const foundGuest = invitedGuests.find(
+      (name) => name.toLowerCase() === search
+    );
+
+    if (!foundGuest) {
+      setInvitationError(
+        "We couldn't find an invitation under that name. Please check the spelling or contact the couple."
+      );
+      return;
+    }
+
+    setInvitationFound(true);
+    setMatchedGuest(foundGuest);
+    setGuestName(foundGuest);
+    setGuests("1");
+  }
+
+  /* -------------------------------------------------
+     RSVP SUBMISSION
+  ------------------------------------------------- */
+
   async function submitRSVP(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setLoading(true);
     setStatus("");
+
+    if (!invitationFound) {
+      setStatus("Please find your invitation first.");
+      setLoading(false);
+      return;
+    }
+
+    if (Number(guests) > 2) {
+      setStatus("Your invitation is limited to 2 seats.");
+      setGuests("2");
+      setLoading(false);
+      return;
+    }
 
     if (!supabase) {
       setStatus("Supabase is not configured.");
@@ -53,10 +143,16 @@ export default function Home() {
     setLoading(false);
   }
 
+  /* -------------------------------------------------
+     GOOGLE CALENDAR
+  ------------------------------------------------- */
+
   function addToGoogleCalendar() {
     const title = "Nezeal Ven & Shintal Khye Wedding";
+
     const details =
       "We are getting married! Dress code: Formal · Semi Formal";
+
     const location = "E&J Grand Pavilion, DC, Bukidnon";
 
     const start = "20260423T160000";
@@ -71,6 +167,10 @@ export default function Home() {
 
     window.open(url, "_blank");
   }
+
+  /* -------------------------------------------------
+     DOWNLOAD CALENDAR
+  ------------------------------------------------- */
 
   function downloadCalendarFile() {
     const ics = `BEGIN:VCALENDAR
@@ -94,6 +194,7 @@ END:VCALENDAR`;
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "nezeal-shintal-wedding.ics";
 
@@ -104,16 +205,17 @@ END:VCALENDAR`;
     URL.revokeObjectURL(url);
   }
 
-  /* -------------------------------------------------
+  /* =================================================
      OPENING INVITATION
-  ------------------------------------------------- */
+  ================================================= */
 
   if (!opened) {
     return (
       <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] flex items-center justify-center px-6 relative overflow-hidden">
-        
-        {/* Decorative circles */}
-        <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#eadfD2] opacity-40 blur-3xl" />
+
+        {/* Decorative background */}
+        <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#eadfd2] opacity-40 blur-3xl" />
+
         <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-[#e4d4c2] opacity-40 blur-3xl" />
 
         <div className="relative z-10 text-center max-w-xl">
@@ -140,7 +242,11 @@ END:VCALENDAR`;
 
           <div className="my-8 flex items-center justify-center gap-4">
             <div className="h-px w-16 bg-[#c9b49e]" />
-            <span className="text-[#9a7654] text-lg">♡</span>
+
+            <span className="text-[#9a7654] text-lg">
+              ♡
+            </span>
+
             <div className="h-px w-16 bg-[#c9b49e]" />
           </div>
 
@@ -169,16 +275,21 @@ END:VCALENDAR`;
     );
   }
 
-  /* -------------------------------------------------
+  /* =================================================
      RSVP PAGE
-  ------------------------------------------------- */
+  ================================================= */
 
   return (
     <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] px-6 py-16">
+
       <div className="max-w-3xl mx-auto">
 
-        {/* Header */}
+        {/* -------------------------------------------------
+           HEADER
+        ------------------------------------------------- */}
+
         <section className="text-center mb-16">
+
           <p className="text-xs tracking-[0.4em] uppercase text-[#9a7654] mb-5">
             Kindly Respond
           </p>
@@ -190,9 +301,135 @@ END:VCALENDAR`;
           <p className="mt-5 text-[#756d63]">
             Please RSVP by April 5, 2026.
           </p>
+
         </section>
 
-        {/* Event Information */}
+        {/* =================================================
+           FIND YOUR INVITATION
+        ================================================= */}
+
+        {!invitationFound && (
+          <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm mb-14">
+
+            <div className="text-center">
+
+              <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-4">
+                Your Invitation
+              </p>
+
+              <h2 className="font-serif text-3xl md:text-4xl">
+                Find Your Invitation
+              </h2>
+
+              <p className="mt-4 text-sm text-[#756d63] max-w-md mx-auto">
+                Please enter your full name exactly as it appears on your
+                invitation.
+              </p>
+
+            </div>
+
+            <div className="mt-8">
+
+              <label className="block text-xs tracking-[0.25em] uppercase mb-3">
+                Your Name
+              </label>
+
+              <input
+                type="text"
+                value={searchName}
+                onChange={(e) => {
+                  setSearchName(e.target.value);
+                  setInvitationError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    findInvitation();
+                  }
+                }}
+                placeholder="Enter your full name"
+                className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#9a7654]"
+              />
+
+            </div>
+
+            {invitationError && (
+              <div className="mt-5 text-center text-sm text-red-600">
+                {invitationError}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={findInvitation}
+              className="w-full mt-8 bg-[#29251f] text-white rounded-full py-5 tracking-[0.25em] uppercase text-sm hover:bg-[#3b352e] transition"
+            >
+              Find My Invitation
+            </button>
+
+          </section>
+        )}
+
+        {/* =================================================
+           INVITATION FOUND
+        ================================================= */}
+
+        {invitationFound && (
+          <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm mb-14 text-center">
+
+            <div className="text-4xl mb-4">
+              ♡
+            </div>
+
+            <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-4">
+              Invitation Found
+            </p>
+
+            <h2 className="font-serif text-3xl md:text-4xl text-[#9a7654]">
+              Welcome, {matchedGuest}
+            </h2>
+
+            <p className="mt-4 text-[#756d63]">
+              We are delighted to celebrate this special day with you.
+            </p>
+
+            <div className="mt-6 inline-block rounded-2xl bg-[#f8f5ef] px-8 py-5">
+
+              <p className="text-xs tracking-[0.25em] uppercase text-[#8a8177]">
+                Seats Reserved
+              </p>
+
+              <p className="font-serif text-4xl text-[#9a7654] mt-2">
+                2
+              </p>
+
+              <p className="text-sm text-[#756d63] mt-1">
+                seats reserved for your invitation
+              </p>
+
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setInvitationFound(false);
+                setMatchedGuest("");
+                setGuestName("");
+                setSearchName("");
+                setInvitationError("");
+              }}
+              className="block mx-auto mt-6 text-xs tracking-[0.15em] uppercase text-[#9a7654] underline underline-offset-4"
+            >
+              Search another name
+            </button>
+
+          </section>
+        )}
+
+        {/* =================================================
+           EVENT INFORMATION
+        ================================================= */}
+
         <section className="text-center mb-14">
 
           {/* Couple Name */}
@@ -205,10 +442,23 @@ END:VCALENDAR`;
           </p>
 
           <div className="mt-6 space-y-2 text-[#756d63]">
-            <p>April 23, 2026 · 4:00 PM</p>
-            <p>E&J Grand Pavilion</p>
-            <p>DC, Bukidnon</p>
-            <p>Formal · Semi Formal</p>
+
+            <p>
+              April 23, 2026 · 4:00 PM
+            </p>
+
+            <p>
+              E&J Grand Pavilion
+            </p>
+
+            <p>
+              DC, Bukidnon
+            </p>
+
+            <p>
+              Formal · Semi Formal
+            </p>
+
           </div>
 
           {/* Calendar Buttons */}
@@ -239,131 +489,195 @@ END:VCALENDAR`;
 
         </section>
 
-        {/* RSVP Form */}
-        <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm">
+        {/* =================================================
+           RSVP FORM
+        ================================================= */}
 
-          <form onSubmit={submitRSVP} className="space-y-7">
+        {invitationFound && (
+          <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm">
 
-            {/* Name */}
-            <div>
-              <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                Your Name
-              </label>
+            <div className="text-center mb-8">
 
-              <input
-                type="text"
-                value={guestName}
-                onChange={(e) => setGuestName(e.target.value)}
-                required
-                placeholder="Your full name"
-                className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
-              />
+              <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-3">
+                RSVP
+              </p>
+
+              <h2 className="font-serif text-3xl md:text-4xl">
+                Please Respond
+              </h2>
+
+              <p className="mt-3 text-sm text-[#756d63]">
+                Your invitation includes a maximum of 2 seats.
+              </p>
+
             </div>
 
-            {/* Email */}
-            <div>
-              <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                Email
-              </label>
+            <form
+              onSubmit={submitRSVP}
+              className="space-y-7"
+            >
 
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="you@example.com"
-                className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
-              />
-            </div>
-
-            {/* Attendance + Guests */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
-
-              {/* Attendance */}
+              {/* Name */}
               <div>
+
                 <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Attendance
-                </label>
-
-                <select
-                  value={attendance}
-                  onChange={(e) => setAttendance(e.target.value)}
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
-                >
-                  <option value="attending">
-                    Joyfully attending
-                  </option>
-
-                  <option value="declining">
-                    Regretfully declining
-                  </option>
-                </select>
-              </div>
-
-              {/* Guests */}
-              <div>
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Guests
+                  Your Name
                 </label>
 
                 <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={guests}
-                  onChange={(e) => setGuests(e.target.value)}
+                  type="text"
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value)}
                   required
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
+                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
                 />
+
               </div>
 
-            </div>
+              {/* Email */}
+              <div>
 
-            {/* Message */}
-            <div>
-              <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                Message (Optional)
-              </label>
+                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
+                  Email
+                </label>
 
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={4}
-                placeholder="A little note for the couple..."
-                className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none resize-none"
-              />
-            </div>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="you@example.com"
+                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
+                />
 
-            {/* Status */}
-            {status && (
-              <div
-                className={`text-center text-sm ${
-                  status.includes("Thank you")
-                    ? "text-green-700"
-                    : "text-red-600"
-                }`}
+              </div>
+
+              {/* Attendance + Guests */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
+
+                {/* Attendance */}
+                <div>
+
+                  <label className="block text-xs tracking-[0.25em] uppercase mb-3">
+                    Attendance
+                  </label>
+
+                  <select
+                    value={attendance}
+                    onChange={(e) => setAttendance(e.target.value)}
+                    className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
+                  >
+
+                    <option value="attending">
+                      Joyfully attending
+                    </option>
+
+                    <option value="declining">
+                      Regretfully declining
+                    </option>
+
+                  </select>
+
+                </div>
+
+                {/* Guests */}
+                <div>
+
+                  <label className="block text-xs tracking-[0.25em] uppercase mb-3">
+                    Number of Guests
+                  </label>
+
+                  <select
+                    value={guests}
+                    onChange={(e) => setGuests(e.target.value)}
+                    className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
+                  >
+
+                    <option value="1">
+                      1 Guest
+                    </option>
+
+                    <option value="2">
+                      2 Guests
+                    </option>
+
+                  </select>
+
+                </div>
+
+              </div>
+
+              {/* Reserved Seats Notice */}
+              <div className="rounded-2xl bg-[#f8f5ef] p-5 text-center">
+
+                <p className="text-xs tracking-[0.2em] uppercase text-[#9a7654]">
+                  Your Invitation
+                </p>
+
+                <p className="font-serif text-xl mt-2">
+                  2 seats reserved
+                </p>
+
+                <p className="text-xs text-[#8a8177] mt-1">
+                  Please do not exceed your reserved seats.
+                </p>
+
+              </div>
+
+              {/* Message */}
+              <div>
+
+                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
+                  Message (Optional)
+                </label>
+
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={4}
+                  placeholder="A little note for the couple..."
+                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none resize-none"
+                />
+
+              </div>
+
+              {/* Status */}
+              {status && (
+                <div
+                  className={`text-center text-sm ${
+                    status.includes("Thank you")
+                      ? "text-green-700"
+                      : "text-red-600"
+                  }`}
+                >
+                  {status}
+                </div>
+              )}
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-[#29251f] text-white rounded-full py-5 tracking-[0.25em] uppercase text-sm hover:bg-[#3b352e] transition disabled:opacity-50"
               >
-                {status}
-              </div>
-            )}
+                {loading ? "Sending..." : "Send RSVP"}
+              </button>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#29251f] text-white rounded-full py-5 tracking-[0.25em] uppercase text-sm hover:bg-[#3b352e] transition disabled:opacity-50"
-            >
-              {loading ? "Sending..." : "Send RSVP"}
-            </button>
+            </form>
 
-          </form>
-        </section>
+          </section>
+        )}
 
-        {/* Footer */}
+        {/* =================================================
+           FOOTER
+        ================================================= */}
+
         <footer className="text-center mt-12 text-sm text-[#8a8177]">
+
           <p>
             We can't wait to celebrate with you. ❤️
           </p>
+
         </footer>
 
       </div>
