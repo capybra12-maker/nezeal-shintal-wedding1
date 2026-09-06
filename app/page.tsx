@@ -51,6 +51,57 @@ export default function Home() {
     setLoading(false);
   }
 
+  function addToGoogleCalendar() {
+    const title = "Nezeal Ven & Shintal Khye Wedding";
+    const details =
+      "We are getting married! Dress code: Formal · Semi Formal";
+    const location = "E&J Grand Pavilion, DC, Bukidnon";
+
+    const start = "20260423T160000";
+    const end = "20260423T190000";
+
+    const url =
+      "https://calendar.google.com/calendar/render?action=TEMPLATE" +
+      `&text=${encodeURIComponent(title)}` +
+      `&dates=${start}/${end}` +
+      `&details=${encodeURIComponent(details)}` +
+      `&location=${encodeURIComponent(location)}`;
+
+    window.open(url, "_blank");
+  }
+
+  function downloadCalendarFile() {
+    const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Nezeal and Shintal Wedding//EN
+BEGIN:VEVENT
+UID:nezeal-shintal-wedding@example.com
+DTSTAMP:20260906T000000Z
+DTSTART:20260423T160000
+DTEND:20260423T190000
+SUMMARY:Nezeal Ven & Shintal Khye Wedding
+DESCRIPTION:We are getting married! Dress code: Formal · Semi Formal
+LOCATION:E&J Grand Pavilion, DC, Bukidnon
+END:VEVENT
+END:VCALENDAR`;
+
+    const blob = new Blob([ics], {
+      type: "text/calendar;charset=utf-8",
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "nezeal-shintal-wedding.ics";
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] px-6 py-16">
       <div className="max-w-3xl mx-auto">
@@ -86,6 +137,31 @@ export default function Home() {
             <p>DC, Bukidnon</p>
             <p>Formal · Semi Formal</p>
           </div>
+
+          {/* Calendar Buttons */}
+          <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
+
+            <button
+              type="button"
+              onClick={addToGoogleCalendar}
+              className="bg-[#29251f] text-white rounded-full px-6 py-3 text-sm tracking-[0.12em] uppercase hover:bg-[#3b352e] transition"
+            >
+              Add to Google Calendar
+            </button>
+
+            <button
+              type="button"
+              onClick={downloadCalendarFile}
+              className="border border-[#29251f] text-[#29251f] rounded-full px-6 py-3 text-sm tracking-[0.12em] uppercase hover:bg-white transition"
+            >
+              Download Calendar
+            </button>
+
+          </div>
+
+          <p className="text-xs text-[#8a8177] mt-4">
+            Save the date so your calendar can remind you when it's time to celebrate. ❤️
+          </p>
         </section>
 
         {/* RSVP Form */}
