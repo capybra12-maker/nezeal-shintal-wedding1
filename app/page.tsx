@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
+  const [opened, setOpened] = useState(false);
+
   const [guestName, setGuestName] = useState("");
   const [email, setEmail] = useState("");
   const [attendance, setAttendance] = useState("attending");
@@ -101,6 +103,75 @@ END:VCALENDAR`;
 
     URL.revokeObjectURL(url);
   }
+
+  /* -------------------------------------------------
+     OPENING INVITATION
+  ------------------------------------------------- */
+
+  if (!opened) {
+    return (
+      <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] flex items-center justify-center px-6 relative overflow-hidden">
+        
+        {/* Decorative circles */}
+        <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#eadfD2] opacity-40 blur-3xl" />
+        <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-[#e4d4c2] opacity-40 blur-3xl" />
+
+        <div className="relative z-10 text-center max-w-xl">
+
+          <p className="text-xs tracking-[0.45em] uppercase text-[#9a7654] mb-8 animate-pulse">
+            Together with their families
+          </p>
+
+          <p className="font-serif text-lg md:text-xl text-[#756d63] mb-5">
+            We joyfully invite you to celebrate the wedding of
+          </p>
+
+          <h1 className="font-serif text-5xl md:text-7xl leading-tight text-[#9a7654] tracking-wide">
+            Nezeal Ven
+          </h1>
+
+          <p className="font-serif text-3xl md:text-4xl my-3 text-[#756d63]">
+            &
+          </p>
+
+          <h1 className="font-serif text-5xl md:text-7xl leading-tight text-[#9a7654] tracking-wide">
+            Shintal Khye
+          </h1>
+
+          <div className="my-8 flex items-center justify-center gap-4">
+            <div className="h-px w-16 bg-[#c9b49e]" />
+            <span className="text-[#9a7654] text-lg">♡</span>
+            <div className="h-px w-16 bg-[#c9b49e]" />
+          </div>
+
+          <p className="font-serif text-2xl md:text-3xl">
+            Are getting married
+          </p>
+
+          <p className="mt-5 text-sm tracking-[0.2em] uppercase text-[#756d63]">
+            April 23, 2026 · 4:00 PM
+          </p>
+
+          <button
+            type="button"
+            onClick={() => setOpened(true)}
+            className="mt-12 rounded-full border border-[#9a7654] px-10 py-4 text-xs tracking-[0.3em] uppercase text-[#9a7654] hover:bg-[#9a7654] hover:text-white transition-all duration-500"
+          >
+            Open Invitation
+          </button>
+
+          <p className="mt-5 text-xs text-[#8a8177]">
+            We would love to celebrate this special day with you.
+          </p>
+
+        </div>
+      </main>
+    );
+  }
+
+  /* -------------------------------------------------
+     RSVP PAGE
+  ------------------------------------------------- */
 
   return (
     <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] px-6 py-16">
