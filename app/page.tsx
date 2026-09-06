@@ -13,7 +13,12 @@ import {
   Users,
 } from "lucide-react";
 
-type Step = "landing" | "search" | "found" | "guest-rsvp" | "success";
+type Step =
+  | "landing"
+  | "search"
+  | "found"
+  | "guest-rsvp"
+  | "success";
 
 type GuestInvitation = {
   full_name: string;
@@ -24,30 +29,30 @@ type GuestInvitation = {
 export default function Home() {
   const [step, setStep] = useState<Step>("landing");
 
-  // Invitation search
   const [searchName, setSearchName] = useState("");
   const [searching, setSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
-  // Found invitation
   const [invitation, setInvitation] =
     useState<GuestInvitation | null>(null);
 
-  // RSVP form
   const [guestName, setGuestName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [attendance, setAttendance] = useState("yes");
+
+  // IMPORTANT:
+  // These values match the Supabase attendance check constraint.
+  const [attendance, setAttendance] =
+    useState("attending");
+
   const [numberOfGuests, setNumberOfGuests] = useState(1);
-  const [guestNames, setGuestNames] = useState<string[]>([""]);
+  const [guestNames, setGuestNames] =
+    useState<string[]>([""]);
+
   const [message, setMessage] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-
-  // --------------------------------------------------
-  // SEARCH INVITATION
-  // --------------------------------------------------
 
   async function searchInvitation(e?: FormEvent) {
     e?.preventDefault();
@@ -69,17 +74,19 @@ export default function Home() {
     setNotFound(false);
 
     try {
-      // First try with invited_people
+      // First try with invited_people.
       const { data, error: searchError } = await supabase
         .from("invited_guests")
-        .select("full_name, seats_reserved, invited_people")
+        .select(
+          "full_name, seats_reserved, invited_people"
+        )
         .ilike("full_name", `%${name}%`)
         .limit(1)
         .maybeSingle();
 
+      // If invited_people does not exist yet,
+      // fall back to the basic columns.
       if (searchError) {
-        // Fallback for databases where invited_people
-        // has not been added yet.
         const fallback = await supabase
           .from("invited_guests")
           .select("full_name, seats_reserved")
@@ -98,16 +105,24 @@ export default function Home() {
 
         const found: GuestInvitation = {
           full_name: fallback.data.full_name,
-          seats_reserved: fallback.data.seats_reserved,
-          invited_people: [fallback.data.full_name],
+          seats_reserved:
+            fallback.data.seats_reserved,
+          invited_people: [
+            fallback.data.full_name,
+          ],
         };
 
         setInvitation(found);
         setGuestName(found.full_name);
-        setNumberOfGuests(found.seats_reserved);
+        setNumberOfGuests(
+          found.seats_reserved
+        );
+
         setGuestNames(
           Array.from(
-            { length: found.seats_reserved },
+            {
+              length: found.seats_reserved,
+            },
             (_, index) =>
               found.invited_people[index] || ""
           )
@@ -130,23 +145,31 @@ export default function Home() {
 
       const found: GuestInvitation = {
         full_name: data.full_name,
-        seats_reserved: data.seats_reserved,
+        seats_reserved:
+          data.seats_reserved,
         invited_people: people,
       };
 
       setInvitation(found);
       setGuestName(found.full_name);
-      setNumberOfGuests(found.seats_reserved);
+      setNumberOfGuests(
+        found.seats_reserved
+      );
+
       setGuestNames(
         Array.from(
-          { length: found.seats_reserved },
-          (_, index) => people[index] || ""
+          {
+            length: found.seats_reserved,
+          },
+          (_, index) =>
+            people[index] || ""
         )
       );
 
       setStep("found");
     } catch (err) {
       console.error(err);
+
       setError(
         "Something went wrong while searching. Please try again."
       );
@@ -155,12 +178,13 @@ export default function Home() {
     }
   }
 
-  // --------------------------------------------------
-  // NUMBER OF GUESTS
-  // --------------------------------------------------
-
-  function updateNumberOfGuests(value: number) {
-    const count = Math.max(1, Math.min(10, value));
+  function updateNumberOfGuests(
+    value: number
+  ) {
+    const count = Math.max(
+      1,
+      Math.min(10, value)
+    );
 
     setNumberOfGuests(count);
 
@@ -175,7 +199,10 @@ export default function Home() {
     });
   }
 
-  function updateGuestName(index: number, value: string) {
+  function updateGuestName(
+    index: number,
+    value: string
+  ) {
     setGuestNames((current) => {
       const updated = [...current];
       updated[index] = value;
@@ -183,15 +210,13 @@ export default function Home() {
     });
   }
 
-  // --------------------------------------------------
-  // SUBMIT RSVP
-  // --------------------------------------------------
-
   async function submitRSVP(e: FormEvent) {
     e.preventDefault();
 
     if (!supabase) {
-      setError("Database connection is not configured.");
+      setError(
+        "Database connection is not configured."
+      );
       return;
     }
 
@@ -200,13 +225,18 @@ export default function Home() {
       return;
     }
 
-    if (attendance === "yes") {
-      const filledGuestNames = guestNames.filter(
-        (name) => name.trim() !== ""
-      );
+    if (attendance === "attending") {
+      const filledGuestNames =
+        guestNames.filter(
+          (name) => name.trim() !== ""
+        );
 
-      if (filledGuestNames.length === 0) {
-        setError("Please enter at least one guest name.");
+      if (
+        filledGuestNames.length === 0
+      ) {
+        setError(
+          "Please enter at least one guest name."
+        );
         return;
       }
     }
@@ -215,87 +245,117 @@ export default function Home() {
     setError("");
 
     try {
-      // ------------------------------------------------
-      // 1. SAVE RSVP
-      // ------------------------------------------------
-
       const rsvpData = {
         guest_name: guestName.trim(),
+
         email: email.trim(),
+
         phone: phone.trim(),
+
+        // This now matches your database constraint.
         attendance,
+
         number_of_guests:
-          attendance === "yes" ? numberOfGuests : 0,
+          attendance === "attending"
+            ? numberOfGuests
+            : 0,
+
         guest_names:
-          attendance === "yes"
-            ? guestNames.filter(
-                (name) => name.trim() !== ""
-              )
+          attendance === "attending"
+            ? guestNames
+                .filter(
+                  (name) =>
+                    name.trim() !== ""
+                )
+                .map((name) =>
+                  name.trim()
+                )
             : [],
+
         message: message.trim(),
       };
 
-      const { error: rsvpError } = await supabase
-        .from("rsvps")
-        .insert(rsvpData);
+      const { error: rsvpError } =
+        await supabase
+          .from("rsvps")
+          .insert(rsvpData);
 
       if (rsvpError) {
-        console.error("RSVP error:", rsvpError);
+        console.error(
+          "RSVP error:",
+          rsvpError
+        );
+
         throw new Error(
           rsvpError.message ||
             "Unable to save your RSVP."
         );
       }
 
-      // ------------------------------------------------
-      // 2. IF THIS IS A GUEST RSVP, ADD THEM TO
-      //    invited_guests SO THEIR NAME CAN BE FOUND
-      //    LATER.
-      // ------------------------------------------------
-
+      // If the person was not already in the
+      // invitation list, add them so they can
+      // search their name later.
       const isExistingInvitation =
         invitation !== null &&
-        invitation.full_name.toLowerCase() ===
-          guestName.trim().toLowerCase();
+        invitation.full_name
+          .toLowerCase() ===
+          guestName
+            .trim()
+            .toLowerCase();
 
       if (!isExistingInvitation) {
         const people =
-          attendance === "yes"
+          attendance === "attending"
             ? guestNames
-                .filter((name) => name.trim() !== "")
-                .map((name) => name.trim())
+                .filter(
+                  (name) =>
+                    name.trim() !== ""
+                )
+                .map((name) =>
+                  name.trim()
+                )
             : [guestName.trim()];
 
-        // Try with invited_people first
-        const { error: guestInsertError } = await supabase
+        // Try including invited_people.
+        const {
+          error: guestInsertError,
+        } = await supabase
           .from("invited_guests")
           .insert({
-            full_name: guestName.trim(),
+            full_name:
+              guestName.trim(),
+
             seats_reserved:
-              attendance === "yes"
+              attendance ===
+              "attending"
                 ? numberOfGuests
                 : 0,
+
             invited_people: people,
           });
 
-        // If invited_people column is not available yet,
-        // save without it so the search still works.
+        // If invited_people is not available,
+        // save the basic guest record instead.
         if (guestInsertError) {
           console.warn(
             "Could not save invited_people. Trying basic guest record.",
             guestInsertError
           );
 
-          const { error: fallbackGuestError } =
-            await supabase
-              .from("invited_guests")
-              .insert({
-                full_name: guestName.trim(),
-                seats_reserved:
-                  attendance === "yes"
-                    ? numberOfGuests
-                    : 0,
-              });
+          const {
+            error: fallbackGuestError,
+          } = await supabase
+            .from("invited_guests")
+            .insert({
+              full_name:
+                guestName.trim(),
+
+              seats_reserved:
+                attendance ===
+                "attending"
+                  ? numberOfGuests
+                  : 0,
+            });
 
           if (fallbackGuestError) {
             console.error(
@@ -319,10 +379,6 @@ export default function Home() {
       setSubmitting(false);
     }
   }
-
-  // --------------------------------------------------
-  // CALENDAR
-  // --------------------------------------------------
 
   function addToGoogleCalendar() {
     const start = "20260423T160000";
@@ -363,23 +419,27 @@ export default function Home() {
       `END:VEVENT\r\n` +
       `END:VCALENDAR`;
 
-    const blob = new Blob([calendar], {
-      type: "text/calendar",
-    });
+    const blob = new Blob(
+      [calendar],
+      {
+        type: "text/calendar",
+      }
+    );
 
-    const url = URL.createObjectURL(blob);
+    const url =
+      URL.createObjectURL(blob);
 
-    const link = document.createElement("a");
+    const link =
+      document.createElement("a");
+
     link.href = url;
-    link.download = "nezeal-shintal-wedding.ics";
+    link.download =
+      "nezeal-shintal-wedding.ics";
+
     link.click();
 
     URL.revokeObjectURL(url);
   }
-
-  // --------------------------------------------------
-  // RESET
-  // --------------------------------------------------
 
   function resetToSearch() {
     setStep("search");
@@ -393,7 +453,10 @@ export default function Home() {
     setGuestName("");
     setEmail("");
     setPhone("");
-    setAttendance("yes");
+
+    // Reset to a valid database value.
+    setAttendance("attending");
+
     setNumberOfGuests(1);
     setGuestNames([""]);
     setMessage("");
@@ -402,10 +465,9 @@ export default function Home() {
     setSearchName("");
   }
 
-  // --------------------------------------------------
-  // LANDING
-  // --------------------------------------------------
-
+  /*
+   * LANDING
+   */
   if (step === "landing") {
     return (
       <main className="min-h-screen bg-[#f8f5ef] text-[#3d3a35]">
@@ -448,7 +510,9 @@ export default function Home() {
             </p>
 
             <button
-              onClick={() => setStep("search")}
+              onClick={() =>
+                setStep("search")
+              }
               className="rounded-full bg-[#4b4741] px-10 py-4 text-sm uppercase tracking-[0.2em] text-white transition hover:bg-[#35322e]"
             >
               Open Invitation
@@ -459,16 +523,17 @@ export default function Home() {
     );
   }
 
-  // --------------------------------------------------
-  // SEARCH
-  // --------------------------------------------------
-
+  /*
+   * SEARCH
+   */
   if (step === "search") {
     return (
       <main className="min-h-screen bg-[#f8f5ef] px-6 py-16 text-[#3d3a35]">
         <div className="mx-auto max-w-xl">
           <button
-            onClick={() => setStep("landing")}
+            onClick={() =>
+              setStep("landing")
+            }
             className="mb-12 flex items-center gap-2 text-sm text-[#82786c]"
           >
             <ChevronLeft size={16} />
@@ -485,8 +550,7 @@ export default function Home() {
             </h2>
 
             <p className="mx-auto mt-5 max-w-md leading-7 text-[#777067]">
-              Please enter the name used on your invitation
-              so we can find your reserved seats.
+              Please enter the name used on your invitation so we can find your reserved seats.
             </p>
 
             <form
@@ -502,7 +566,9 @@ export default function Home() {
                 <input
                   value={searchName}
                   onChange={(e) =>
-                    setSearchName(e.target.value)
+                    setSearchName(
+                      e.target.value
+                    )
                   }
                   placeholder="Enter your name"
                   className="w-full rounded-full border border-[#d8d0c5] bg-white px-14 py-4 outline-none transition focus:border-[#8d8173]"
@@ -529,8 +595,14 @@ export default function Home() {
                     type="button"
                     onClick={() => {
                       resetRSVP();
-                      setGuestName(searchName.trim());
-                      setStep("guest-rsvp");
+
+                      setGuestName(
+                        searchName.trim()
+                      );
+
+                      setStep(
+                        "guest-rsvp"
+                      );
                     }}
                     className="mt-6 rounded-full bg-[#4b4741] px-8 py-3 text-sm uppercase tracking-[0.15em] text-white"
                   >
@@ -546,6 +618,7 @@ export default function Home() {
                   className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-[#4b4741] px-8 py-4 text-sm uppercase tracking-[0.18em] text-white disabled:opacity-60"
                 >
                   <Search size={17} />
+
                   {searching
                     ? "Searching..."
                     : "Search Invitation"}
@@ -558,11 +631,16 @@ export default function Home() {
     );
   }
 
-  // --------------------------------------------------
-  // FOUND INVITATION
-  // --------------------------------------------------
-
-  if (step === "found" && invitation) {
+  /*
+   * FOUND INVITATION
+   *
+   * IMPORTANT:
+   * There is NO Continue to RSVP button here.
+   */
+  if (
+    step === "found" &&
+    invitation
+  ) {
     return (
       <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
         <div className="mx-auto max-w-2xl">
@@ -597,9 +675,11 @@ export default function Home() {
                   size={21}
                   className="mb-3 text-[#8e8275]"
                 />
+
                 <p className="text-xs uppercase tracking-widest text-[#9b9185]">
                   Date
                 </p>
+
                 <p className="mt-2 font-medium">
                   April 23, 2026
                 </p>
@@ -610,9 +690,11 @@ export default function Home() {
                   size={21}
                   className="mb-3 text-[#8e8275]"
                 />
+
                 <p className="text-xs uppercase tracking-widest text-[#9b9185]">
                   Time
                 </p>
+
                 <p className="mt-2 font-medium">
                   4:00 PM
                 </p>
@@ -623,12 +705,15 @@ export default function Home() {
                   size={21}
                   className="mb-3 text-[#8e8275]"
                 />
+
                 <p className="text-xs uppercase tracking-widest text-[#9b9185]">
                   Venue
                 </p>
+
                 <p className="mt-2 font-medium">
                   E&J Grand Pavilion
                 </p>
+
                 <p className="mt-1 text-sm text-[#777067]">
                   DC, Bukidnon
                 </p>
@@ -639,12 +724,15 @@ export default function Home() {
                   size={21}
                   className="mb-3 text-[#8e8275]"
                 />
+
                 <p className="text-xs uppercase tracking-widest text-[#9b9185]">
                   Reserved Seats
                 </p>
+
                 <p className="mt-2 font-medium">
                   {invitation.seats_reserved}{" "}
-                  {invitation.seats_reserved === 1
+                  {invitation.seats_reserved ===
+                  1
                     ? "seat"
                     : "seats"}
                 </p>
@@ -665,7 +753,10 @@ export default function Home() {
 
               <div className="mt-5 space-y-3">
                 {invitation.invited_people.map(
-                  (person, index) => (
+                  (
+                    person,
+                    index
+                  ) => (
                     <div
                       key={`${person}-${index}`}
                       className="flex items-center gap-3 rounded-xl bg-[#f8f5ef] px-4 py-3"
@@ -674,7 +765,9 @@ export default function Home() {
                         {index + 1}
                       </div>
 
-                      <span>{person}</span>
+                      <span>
+                        {person}
+                      </span>
                     </div>
                   )
                 )}
@@ -693,7 +786,9 @@ export default function Home() {
 
             <div className="mt-8 grid gap-3 md:grid-cols-2">
               <button
-                onClick={addToGoogleCalendar}
+                onClick={
+                  addToGoogleCalendar
+                }
                 className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
               >
                 <Calendar size={17} />
@@ -701,7 +796,9 @@ export default function Home() {
               </button>
 
               <button
-                onClick={downloadCalendar}
+                onClick={
+                  downloadCalendar
+                }
                 className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
               >
                 <Calendar size={17} />
@@ -714,10 +811,9 @@ export default function Home() {
     );
   }
 
-  // --------------------------------------------------
-  // GUEST RSVP
-  // --------------------------------------------------
-
+  /*
+   * GUEST RSVP
+   */
   if (step === "guest-rsvp") {
     return (
       <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
@@ -741,8 +837,7 @@ export default function Home() {
               </h1>
 
               <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-[#777067]">
-                We couldn't find your invitation, but you
-                are still welcome to RSVP as a guest.
+                We couldn't find your invitation, but you are still welcome to RSVP as a guest.
               </p>
             </div>
 
@@ -759,7 +854,9 @@ export default function Home() {
                   required
                   value={guestName}
                   onChange={(e) =>
-                    setGuestName(e.target.value)
+                    setGuestName(
+                      e.target.value
+                    )
                   }
                   placeholder="Full name"
                   className="w-full rounded-xl border border-[#d8d0c5] bg-white px-4 py-3 outline-none focus:border-[#8d8173]"
@@ -776,7 +873,9 @@ export default function Home() {
                     type="email"
                     value={email}
                     onChange={(e) =>
-                      setEmail(e.target.value)
+                      setEmail(
+                        e.target.value
+                      )
                     }
                     placeholder="you@example.com"
                     className="w-full rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
@@ -791,7 +890,9 @@ export default function Home() {
                   <input
                     value={phone}
                     onChange={(e) =>
-                      setPhone(e.target.value)
+                      setPhone(
+                        e.target.value
+                      )
                     }
                     placeholder="Contact number"
                     className="w-full rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
@@ -808,10 +909,13 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() =>
-                      setAttendance("yes")
+                      setAttendance(
+                        "attending"
+                      )
                     }
                     className={`rounded-xl border p-4 text-left ${
-                      attendance === "yes"
+                      attendance ===
+                      "attending"
                         ? "border-[#625b52] bg-[#f8f5ef]"
                         : "border-[#ddd5ca]"
                     }`}
@@ -819,6 +923,7 @@ export default function Home() {
                     <p className="font-medium">
                       Yes, I'll be there
                     </p>
+
                     <p className="mt-1 text-xs text-[#777067]">
                       We look forward to seeing you.
                     </p>
@@ -827,10 +932,13 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() =>
-                      setAttendance("no")
+                      setAttendance(
+                        "Regretfully declining"
+                      )
                     }
                     className={`rounded-xl border p-4 text-left ${
-                      attendance === "no"
+                      attendance ===
+                      "Regretfully declining"
                         ? "border-[#625b52] bg-[#f8f5ef]"
                         : "border-[#ddd5ca]"
                     }`}
@@ -838,6 +946,7 @@ export default function Home() {
                     <p className="font-medium">
                       Sorry, I can't make it
                     </p>
+
                     <p className="mt-1 text-xs text-[#777067]">
                       We'll miss celebrating with you.
                     </p>
@@ -845,7 +954,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {attendance === "yes" && (
+              {attendance ===
+                "attending" && (
                 <>
                   <div>
                     <label className="mb-2 block text-sm font-medium">
@@ -853,28 +963,45 @@ export default function Home() {
                     </label>
 
                     <select
-                      value={numberOfGuests}
+                      value={
+                        numberOfGuests
+                      }
                       onChange={(e) =>
                         updateNumberOfGuests(
-                          Number(e.target.value)
+                          Number(
+                            e.target.value
+                          )
                         )
                       }
                       className="w-full rounded-xl border border-[#d8d0c5] bg-white px-4 py-3 outline-none"
                     >
                       {Array.from(
-                        { length: 10 },
-                        (_, index) => index + 1
-                      ).map((number) => (
-                        <option
-                          key={number}
-                          value={number}
-                        >
-                          {number}{" "}
-                          {number === 1
-                            ? "Guest"
-                            : "Guests"}
-                        </option>
-                      ))}
+                        {
+                          length: 10,
+                        },
+                        (
+                          _,
+                          index
+                        ) =>
+                          index + 1
+                      ).map(
+                        (number) => (
+                          <option
+                            key={
+                              number
+                            }
+                            value={
+                              number
+                            }
+                          >
+                            {number}{" "}
+                            {number ===
+                            1
+                              ? "Guest"
+                              : "Guests"}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
 
@@ -885,19 +1012,31 @@ export default function Home() {
 
                     <div className="space-y-3">
                       {guestNames.map(
-                        (name, index) => (
+                        (
+                          name,
+                          index
+                        ) => (
                           <input
-                            key={index}
+                            key={
+                              index
+                            }
                             required
-                            value={name}
-                            onChange={(e) =>
+                            value={
+                              name
+                            }
+                            onChange={(
+                              e
+                            ) =>
                               updateGuestName(
                                 index,
-                                e.target.value
+                                e
+                                  .target
+                                  .value
                               )
                             }
                             placeholder={`Guest ${
-                              index + 1
+                              index +
+                              1
                             } name`}
                             className="w-full rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
                           />
@@ -916,7 +1055,9 @@ export default function Home() {
                 <textarea
                   value={message}
                   onChange={(e) =>
-                    setMessage(e.target.value)
+                    setMessage(
+                      e.target.value
+                    )
                   }
                   rows={4}
                   placeholder="Leave a message for the couple..."
@@ -951,10 +1092,9 @@ export default function Home() {
     );
   }
 
-  // --------------------------------------------------
-  // SUCCESS
-  // --------------------------------------------------
-
+  /*
+   * SUCCESS
+   */
   if (step === "success") {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f8f5ef] px-6 py-16 text-[#3d3a35]">
@@ -972,9 +1112,7 @@ export default function Home() {
           </h1>
 
           <p className="mx-auto mt-5 max-w-md leading-7 text-[#777067]">
-            Your RSVP has been successfully recorded.
-            We are so happy to hear from you and look
-            forward to celebrating together.
+            Your RSVP has been successfully recorded. We are so happy to hear from you and look forward to celebrating together.
           </p>
 
           <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6">
@@ -989,7 +1127,9 @@ export default function Home() {
 
           <div className="mt-8 grid gap-3 md:grid-cols-2">
             <button
-              onClick={addToGoogleCalendar}
+              onClick={
+                addToGoogleCalendar
+              }
               className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
             >
               <Calendar size={17} />
@@ -997,7 +1137,9 @@ export default function Home() {
             </button>
 
             <button
-              onClick={downloadCalendar}
+              onClick={
+                downloadCalendar
+              }
               className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
             >
               <Calendar size={17} />
