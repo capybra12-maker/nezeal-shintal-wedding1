@@ -1,7 +1,14 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Check, ChevronLeft, Heart, Minus, Plus } from "lucide-react";
+import {
+  Calendar,
+  Check,
+  ChevronLeft,
+  Heart,
+  Minus,
+  Plus,
+} from "lucide-react";
 
 export default function RSVPPage() {
   const [name, setName] = useState("");
@@ -9,16 +16,107 @@ export default function RSVPPage() {
     "attending" | "not_attending" | ""
   >("");
   const [guestCount, setGuestCount] = useState(1);
+  const [guestNames, setGuestNames] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
+
+  function updateGuestCount(count: number) {
+    const newCount = Math.max(1, Math.min(10, count));
+
+    setGuestCount(newCount);
+
+    const additionalGuests = Math.max(0, newCount - 1);
+
+    setGuestNames((current) => {
+      const updated = [...current];
+
+      while (updated.length < additionalGuests) {
+        updated.push("");
+      }
+
+      return updated.slice(0, additionalGuests);
+    });
+  }
+
+  function updateGuestName(index: number, value: string) {
+    setGuestNames((current) => {
+      const updated = [...current];
+      updated[index] = value;
+      return updated;
+    });
+  }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    if (!name.trim()) return;
-    if (!attendance) return;
+    if (!name.trim() || !attendance) {
+      return;
+    }
 
     setSubmitted(true);
+
+    console.log({
+      name,
+      attendance,
+      guestCount,
+      guestNames,
+      message,
+    });
+  }
+
+  function addToGoogleCalendar() {
+    const start = "20260423T160000";
+    const end = "20260423T190000";
+
+    const url =
+      "https://calendar.google.com/calendar/render?action=TEMPLATE" +
+      "&text=" +
+      encodeURIComponent("Nezeal Ven & Shintal Khye Wedding") +
+      "&dates=" +
+      start +
+      "/" +
+      end +
+      "&details=" +
+      encodeURIComponent(
+        "We are getting married! We would love to celebrate this special day with you."
+      ) +
+      "&location=" +
+      encodeURIComponent("E&J Grand Pavilion, DC, Bukidnon");
+
+    window.open(url, "_blank");
+  }
+
+  function downloadCalendar() {
+    const calendar =
+      `BEGIN:VCALENDAR\r\n` +
+      `VERSION:2.0\r\n` +
+      `PRODID:-//Nezeal Ven & Shintal Khye//Wedding//EN\r\n` +
+      `BEGIN:VEVENT\r\n` +
+      `DTSTART:20260423T160000\r\n` +
+      `DTEND:20260423T190000\r\n` +
+      `SUMMARY:Nezeal Ven & Shintal Khye Wedding\r\n` +
+      `LOCATION:E&J Grand Pavilion, DC, Bukidnon\r\n` +
+      `DESCRIPTION:We are getting married! We would love to celebrate this special day with you.\r\n` +
+      `BEGIN:VALARM\r\n` +
+      `TRIGGER:-P1D\r\n` +
+      `ACTION:DISPLAY\r\n` +
+      `DESCRIPTION:Wedding tomorrow - Nezeal Ven & Shintal Khye\r\n` +
+      `END:VALARM\r\n` +
+      `END:VEVENT\r\n` +
+      `END:VCALENDAR`;
+
+    const blob = new Blob([calendar], {
+      type: "text/calendar",
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "nezeal-shintal-wedding.ics";
+    link.click();
+
+    URL.revokeObjectURL(url);
   }
 
   if (submitted) {
@@ -37,16 +135,13 @@ export default function RSVPPage() {
             </p>
 
             <h1 className="mt-4 font-serif text-4xl md:text-5xl">
-              {attendance === "attending"
-                ? "We can't wait to see you."
-                : "Thank you for letting us know."}
+              We can't wait to celebrate with you.
             </h1>
 
             <div className="mx-auto my-7 h-px w-20 bg-[#c9bdad]" />
 
-            <p className="mx-auto max-w-md leading-7 text-[#777067]">
-              Your RSVP has been received. We are so grateful to have you
-              celebrate this special day with us.
+            <p className="leading-7 text-[#777067]">
+              Your RSVP has been received.
             </p>
 
             <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6">
@@ -58,6 +153,26 @@ export default function RSVPPage() {
                 April 23, 2026 · 4:00 PM
               </p>
             </div>
+
+            <div className="mt-8 grid gap-3 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={addToGoogleCalendar}
+                className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm transition hover:bg-[#f8f5ef]"
+              >
+                <Calendar size={17} />
+                Google Calendar
+              </button>
+
+              <button
+                type="button"
+                onClick={downloadCalendar}
+                className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm transition hover:bg-[#f8f5ef]"
+              >
+                <Calendar size={17} />
+                Download Calendar
+              </button>
+            </div>
           </div>
         </div>
       </main>
@@ -68,11 +183,10 @@ export default function RSVPPage() {
     <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
       <div className="mx-auto max-w-2xl">
 
-        {/* Back */}
         <button
           type="button"
           onClick={() => window.history.back()}
-          className="mb-10 flex items-center gap-2 text-sm text-[#82786c] transition hover:text-[#4b4741]"
+          className="mb-10 flex items-center gap-2 text-sm text-[#82786c]"
         >
           <ChevronLeft size={16} />
           Back
@@ -80,7 +194,6 @@ export default function RSVPPage() {
 
         {/* Wedding Header */}
         <div className="text-center">
-
           <p className="mb-5 text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
             Your Response
           </p>
@@ -112,7 +225,6 @@ export default function RSVPPage() {
           <p className="mt-2 text-[#82786c]">
             4:00 PM · E&amp;J Grand Pavilion
           </p>
-
         </div>
 
         {/* RSVP FORM */}
@@ -129,13 +241,12 @@ export default function RSVPPage() {
 
             <p className="mx-auto mt-4 max-w-md leading-7 text-[#777067]">
               We would love to celebrate this special day with you.
-              Please let us know if you will be joining us.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="mt-10">
 
-            {/* NAME */}
+            {/* Main Guest */}
             <div>
               <label
                 htmlFor="name"
@@ -151,26 +262,24 @@ export default function RSVPPage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Enter your full name"
                 required
-                className="w-full rounded-full border border-[#d8d0c5] bg-white px-6 py-4 text-[#3d3a35] outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
+                className="w-full rounded-full border border-[#d8d0c5] bg-white px-6 py-4 outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
               />
             </div>
 
-            {/* ATTENDANCE */}
+            {/* Attendance */}
             <div className="mt-8">
-
               <p className="mb-4 text-xs uppercase tracking-[0.25em] text-[#9b9185]">
                 Will You Be Joining Us?
               </p>
 
               <div className="grid gap-3 md:grid-cols-2">
-
                 <button
                   type="button"
                   onClick={() => setAttendance("attending")}
                   className={`rounded-full border px-5 py-4 text-sm transition ${
                     attendance === "attending"
                       ? "border-[#4b4741] bg-[#4b4741] text-white"
-                      : "border-[#cfc5b8] bg-white text-[#4b4741] hover:border-[#8d8173]"
+                      : "border-[#cfc5b8] bg-white hover:border-[#8d8173]"
                   }`}
                 >
                   Joyfully Accepts
@@ -180,21 +289,20 @@ export default function RSVPPage() {
                   type="button"
                   onClick={() => {
                     setAttendance("not_attending");
-                    setGuestCount(1);
+                    updateGuestCount(1);
                   }}
                   className={`rounded-full border px-5 py-4 text-sm transition ${
                     attendance === "not_attending"
                       ? "border-[#4b4741] bg-[#4b4741] text-white"
-                      : "border-[#cfc5b8] bg-white text-[#4b4741] hover:border-[#8d8173]"
+                      : "border-[#cfc5b8] bg-white hover:border-[#8d8173]"
                   }`}
                 >
                   Regretfully Declines
                 </button>
-
               </div>
             </div>
 
-            {/* GUEST COUNT */}
+            {/* Guests */}
             {attendance === "attending" && (
               <div className="mt-8">
 
@@ -219,11 +327,9 @@ export default function RSVPPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        setGuestCount((count) =>
-                          Math.max(1, count - 1)
-                        )
+                        updateGuestCount(guestCount - 1)
                       }
-                      className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white transition hover:bg-[#eee9e1]"
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white"
                       aria-label="Decrease guest count"
                     >
                       <Minus size={16} />
@@ -236,25 +342,58 @@ export default function RSVPPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        setGuestCount((count) =>
-                          Math.min(10, count + 1)
-                        )
+                        updateGuestCount(guestCount + 1)
                       }
-                      className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white transition hover:bg-[#eee9e1]"
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-[#cfc5b8] bg-white"
                       aria-label="Increase guest count"
                     >
                       <Plus size={16} />
                     </button>
 
                   </div>
-
                 </div>
+
+                {/* Additional Guest Names */}
+                {guestCount > 1 && (
+                  <div className="mt-6 space-y-4">
+
+                    <p className="text-xs uppercase tracking-[0.25em] text-[#9b9185]">
+                      Additional Guest Names
+                    </p>
+
+                    {guestNames.map((guestName, index) => (
+                      <div key={index}>
+                        <label
+                          htmlFor={`guest-${index}`}
+                          className="mb-2 block text-sm text-[#777067]"
+                        >
+                          Guest {index + 1}
+                        </label>
+
+                        <input
+                          id={`guest-${index}`}
+                          type="text"
+                          value={guestName}
+                          onChange={(e) =>
+                            updateGuestName(
+                              index,
+                              e.target.value
+                            )
+                          }
+                          placeholder={`Enter guest ${index + 1} name`}
+                          required
+                          className="w-full rounded-full border border-[#d8d0c5] bg-white px-6 py-4 outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
+                        />
+                      </div>
+                    ))}
+
+                  </div>
+                )}
               </div>
             )}
 
-            {/* MESSAGE */}
+            {/* Message */}
             <div className="mt-8">
-
               <label
                 htmlFor="message"
                 className="mb-2 block text-xs uppercase tracking-[0.25em] text-[#9b9185]"
@@ -267,29 +406,26 @@ export default function RSVPPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Leave a message for Nezeal & Shintal..."
-                rows={5}
-                className="w-full resize-none rounded-2xl border border-[#d8d0c5] bg-white px-5 py-4 text-[#3d3a35] outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
+                rows={4}
+                className="w-full resize-none rounded-2xl border border-[#d8d0c5] bg-white px-5 py-4 outline-none transition placeholder:text-[#aaa196] focus:border-[#8d8173]"
               />
-
             </div>
 
-            {/* DEADLINE */}
+            {/* Deadline */}
             <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6 text-center">
-
               <p className="font-serif text-2xl">
                 We can't wait to celebrate with you.
               </p>
 
-              <p className="mt-3 text-sm leading-6 text-[#777067]">
+              <p className="mt-3 text-sm text-[#777067]">
                 RSVP deadline: April 5, 2026
               </p>
-
             </div>
 
-            {/* SUBMIT */}
+            {/* Submit */}
             <button
               type="submit"
-              disabled={!attendance || !name.trim()}
+              disabled={!name.trim() || !attendance}
               className="mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-[#4b4741] px-8 py-4 text-sm uppercase tracking-[0.18em] text-white transition hover:bg-[#35322e] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Check size={17} />
@@ -298,43 +434,40 @@ export default function RSVPPage() {
 
           </form>
 
-          {/* NAME NOT FOUND */}
-          <div className="mt-8 rounded-2xl border border-[#ded5c9] bg-[#fffdfa] p-6 text-center">
-
-            <p className="font-serif text-2xl">
-              Can't find your name?
-            </p>
-
-            <p className="mt-3 text-sm leading-6 text-[#777067]">
-              Please contact the couple for assistance with your invitation.
-            </p>
-
-            <div className="mt-5 text-sm text-[#817669]">
-              <p>Shintal Khye</p>
-              <p>Nezeal Ven</p>
-            </div>
-
-          </div>
-
         </div>
 
-        {/* Footer */}
+        {/* Calendar */}
         <div className="py-10 text-center">
 
-          <Heart
-            size={20}
-            strokeWidth={1}
-            className="mx-auto text-[#a99b89]"
-          />
-
-          <p className="mt-3 text-xs uppercase tracking-[0.25em] text-[#9b9185]">
-            Nezeal Ven &amp; Shintal Khye
+          <p className="font-serif text-2xl">
+            Don't forget the date
           </p>
 
-          <p className="mt-2 text-xs text-[#aaa196]">
-            April 23, 2026 · 4:00 PM
+          <p className="mt-2 text-sm text-[#777067]">
+            Save our wedding day to your calendar.
           </p>
 
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+
+            <button
+              type="button"
+              onClick={addToGoogleCalendar}
+              className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] bg-white px-5 py-3 text-sm transition hover:bg-[#eee9e1]"
+            >
+              <Calendar size={17} />
+              Add to Google Calendar
+            </button>
+
+            <button
+              type="button"
+              onClick={downloadCalendar}
+              className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] bg-white px-5 py-3 text-sm transition hover:bg-[#eee9e1]"
+            >
+              <Calendar size={17} />
+              Download Calendar
+            </button>
+
+          </div>
         </div>
 
       </div>
