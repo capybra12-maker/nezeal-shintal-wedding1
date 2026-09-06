@@ -123,13 +123,15 @@ END:VCALENDAR`;
 
         {/* Event Information */}
         <section className="text-center mb-14">
-          <p className="text-xs tracking-[0.3em] uppercase text-[#9a7654]">
-            Nezeal Ven & Shintal Khye
-          </p>
 
-          <h2 className="font-serif text-3xl mt-3">
-            Are getting married
+          {/* Couple Name */}
+          <h2 className="font-serif text-4xl md:text-5xl tracking-wide text-[#9a7654] leading-tight">
+            Nezeal Ven & Shintal Khye
           </h2>
+
+          <p className="font-serif text-2xl md:text-3xl mt-3">
+            Are getting married
+          </p>
 
           <div className="mt-6 space-y-2 text-[#756d63]">
             <p>April 23, 2026 · 4:00 PM</p>
@@ -160,8 +162,10 @@ END:VCALENDAR`;
           </div>
 
           <p className="text-xs text-[#8a8177] mt-4">
-            Save the date so your calendar can remind you when it's time to celebrate. ❤️
+            Save the date so your calendar can remind you when it's time to
+            celebrate. ❤️
           </p>
+
         </section>
 
         {/* RSVP Form */}
@@ -204,6 +208,7 @@ END:VCALENDAR`;
             {/* Attendance + Guests */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
 
+              {/* Attendance */}
               <div>
                 <label className="block text-xs tracking-[0.25em] uppercase mb-3">
                   Attendance
@@ -224,6 +229,7 @@ END:VCALENDAR`;
                 </select>
               </div>
 
+              {/* Guests */}
               <div>
                 <label className="block text-xs tracking-[0.25em] uppercase mb-3">
                   Guests
