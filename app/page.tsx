@@ -1,15 +1,25 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase } from "@/lib/supabase";
+import {
+  Calendar,
+  Check,
+  ChevronLeft,
+  Clock,
+  Heart,
+  MapPin,
+  Search,
+  Users,
+} from "lucide-react";
 
-type Step =
-  | "landing"
-  | "search"
-  | "found"
-  | "rsvp"
-  | "walkin"
-  | "success";
+type Step = "landing" | "search" | "found" | "guest-rsvp" | "success";
+
+type GuestInvitation = {
+  full_name: string;
+  seats_reserved: number;
+  invited_people: string[];
+};
 
 export default function Home() {
   const [step, setStep] = useState<Step>("landing");
@@ -19,877 +29,991 @@ export default function Home() {
   const [searching, setSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
-  // Invitation information
-  const [invitedName, setInvitedName] = useState("");
-  const [seatsReserved, setSeatsReserved] = useState(0);
+  // Found invitation
+  const [invitation, setInvitation] =
+    useState<GuestInvitation | null>(null);
 
   // RSVP form
   const [guestName, setGuestName] = useState("");
   const [email, setEmail] = useState("");
-  const [attendance, setAttendance] = useState("attending");
-  const [guests, setGuests] = useState("1");
+  const [phone, setPhone] = useState("");
+  const [attendance, setAttendance] = useState("yes");
+  const [numberOfGuests, setNumberOfGuests] = useState(1);
+  const [guestNames, setGuestNames] = useState<string[]>([""]);
   const [message, setMessage] = useState("");
 
-  // Status
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  /*
-   * OPEN INVITATION
-   */
-  function openInvitation() {
-    setStep("search");
-    setStatus("");
-    setNotFound(false);
-  }
+  // --------------------------------------------------
+  // SEARCH INVITATION
+  // --------------------------------------------------
 
-  /*
-   * SEARCH INVITATION
-   */
-  async function searchInvitation(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function searchInvitation(e?: FormEvent) {
+    e?.preventDefault();
 
     const name = searchName.trim();
 
     if (!name) {
-      setStatus("Please enter your full name.");
+      setError("Please enter your name.");
       return;
     }
 
     if (!supabase) {
-      setStatus("Supabase is not configured.");
+      setError("Database connection is not configured.");
       return;
     }
 
     setSearching(true);
-    setStatus("");
+    setError("");
     setNotFound(false);
 
-    const { data, error } = await supabase
-      .from("invited_guests")
-      .select("full_name, seats_reserved")
-      .ilike("full_name", name)
-      .maybeSingle();
+    try {
+      // First try with invited_people
+      const { data, error: searchError } = await supabase
+        .from("invited_guests")
+        .select("full_name, seats_reserved, invited_people")
+        .ilike("full_name", `%${name}%`)
+        .limit(1)
+        .maybeSingle();
 
-    if (error) {
-      console.error(error);
+      if (searchError) {
+        // Fallback for databases where invited_people
+        // has not been added yet.
+        const fallback = await supabase
+          .from("invited_guests")
+          .select("full_name, seats_reserved")
+          .ilike("full_name", `%${name}%`)
+          .limit(1)
+          .maybeSingle();
 
-      setStatus(
-        "We couldn't check your invitation right now. Please try again."
+        if (fallback.error) {
+          throw fallback.error;
+        }
+
+        if (!fallback.data) {
+          setNotFound(true);
+          return;
+        }
+
+        const found: GuestInvitation = {
+          full_name: fallback.data.full_name,
+          seats_reserved: fallback.data.seats_reserved,
+          invited_people: [fallback.data.full_name],
+        };
+
+        setInvitation(found);
+        setGuestName(found.full_name);
+        setNumberOfGuests(found.seats_reserved);
+        setGuestNames(
+          Array.from(
+            { length: found.seats_reserved },
+            (_, index) =>
+              found.invited_people[index] || ""
+          )
+        );
+
+        setStep("found");
+        return;
+      }
+
+      if (!data) {
+        setNotFound(true);
+        return;
+      }
+
+      const people =
+        Array.isArray(data.invited_people) &&
+        data.invited_people.length > 0
+          ? data.invited_people
+          : [data.full_name];
+
+      const found: GuestInvitation = {
+        full_name: data.full_name,
+        seats_reserved: data.seats_reserved,
+        invited_people: people,
+      };
+
+      setInvitation(found);
+      setGuestName(found.full_name);
+      setNumberOfGuests(found.seats_reserved);
+      setGuestNames(
+        Array.from(
+          { length: found.seats_reserved },
+          (_, index) => people[index] || ""
+        )
       );
 
+      setStep("found");
+    } catch (err) {
+      console.error(err);
+      setError(
+        "Something went wrong while searching. Please try again."
+      );
+    } finally {
       setSearching(false);
-      return;
     }
-
-    if (!data) {
-      setNotFound(true);
-      setSearching(false);
-      return;
-    }
-
-    // Invitation found
-    setInvitedName(data.full_name);
-    setSeatsReserved(Number(data.seats_reserved) || 1);
-
-    // Put the invitation name into the RSVP form
-    setGuestName(data.full_name);
-
-    setSearching(false);
-    setStep("found");
   }
 
-  /*
-   * CONTINUE FROM INVITATION DETAILS
-   */
-  function continueToRSVP() {
-    setStep("rsvp");
-    setStatus("");
+  // --------------------------------------------------
+  // NUMBER OF GUESTS
+  // --------------------------------------------------
 
-    // Default guests to the invitation amount,
-    // but don't allow more than 2 in the dropdown.
-    const defaultGuests = Math.min(seatsReserved, 2);
+  function updateNumberOfGuests(value: number) {
+    const count = Math.max(1, Math.min(10, value));
 
-    setGuests(String(defaultGuests));
+    setNumberOfGuests(count);
+
+    setGuestNames((current) => {
+      const updated = [...current];
+
+      while (updated.length < count) {
+        updated.push("");
+      }
+
+      return updated.slice(0, count);
+    });
   }
 
-  /*
-   * GO TO WALK-IN RSVP
-   */
-  function continueAsWalkIn() {
-    setStep("walkin");
-    setStatus("");
-
-    // Keep the name they searched for
-    setGuestName(searchName.trim());
+  function updateGuestName(index: number, value: string) {
+    setGuestNames((current) => {
+      const updated = [...current];
+      updated[index] = value;
+      return updated;
+    });
   }
 
-  /*
-   * SUBMIT RSVP
-   */
-  async function submitRSVP(e: FormEvent<HTMLFormElement>) {
+  // --------------------------------------------------
+  // SUBMIT RSVP
+  // --------------------------------------------------
+
+  async function submitRSVP(e: FormEvent) {
     e.preventDefault();
 
     if (!supabase) {
-      setStatus("Supabase is not configured.");
+      setError("Database connection is not configured.");
       return;
     }
 
-    const name = guestName.trim();
-    const numberOfGuests = Number(guests);
-
-    if (!name) {
-      setStatus("Please enter your full name.");
+    if (!guestName.trim()) {
+      setError("Please enter your name.");
       return;
     }
 
-    setLoading(true);
-    setStatus("");
+    if (attendance === "yes") {
+      const filledGuestNames = guestNames.filter(
+        (name) => name.trim() !== ""
+      );
 
-    /*
-     * INVITED GUEST RSVP
-     */
-    if (step === "rsvp") {
-      if (numberOfGuests > seatsReserved) {
-        setStatus(
-          `Your invitation is reserved for ${seatsReserved} ${
-            seatsReserved === 1 ? "guest" : "guests"
-          }.`
+      if (filledGuestNames.length === 0) {
+        setError("Please enter at least one guest name.");
+        return;
+      }
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      // ------------------------------------------------
+      // 1. SAVE RSVP
+      // ------------------------------------------------
+
+      const rsvpData = {
+        guest_name: guestName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        attendance,
+        number_of_guests:
+          attendance === "yes" ? numberOfGuests : 0,
+        guest_names:
+          attendance === "yes"
+            ? guestNames.filter(
+                (name) => name.trim() !== ""
+              )
+            : [],
+        message: message.trim(),
+      };
+
+      const { error: rsvpError } = await supabase
+        .from("rsvps")
+        .insert(rsvpData);
+
+      if (rsvpError) {
+        console.error("RSVP error:", rsvpError);
+        throw new Error(
+          rsvpError.message ||
+            "Unable to save your RSVP."
         );
-
-        setGuests(String(Math.min(seatsReserved, 2)));
-        setLoading(false);
-        return;
       }
 
-      const { error } = await supabase.from("rsvps").insert({
-        guest_name: invitedName,
-        email: email.trim(),
-        attendance,
-        guests: numberOfGuests,
-        message: message.trim() || null,
-      });
+      // ------------------------------------------------
+      // 2. IF THIS IS A GUEST RSVP, ADD THEM TO
+      //    invited_guests SO THEIR NAME CAN BE FOUND
+      //    LATER.
+      // ------------------------------------------------
 
-      if (error) {
-        console.error(error);
+      const isExistingInvitation =
+        invitation !== null &&
+        invitation.full_name.toLowerCase() ===
+          guestName.trim().toLowerCase();
 
-        setStatus(`Unable to send RSVP: ${error.message}`);
-        setLoading(false);
-        return;
+      if (!isExistingInvitation) {
+        const people =
+          attendance === "yes"
+            ? guestNames
+                .filter((name) => name.trim() !== "")
+                .map((name) => name.trim())
+            : [guestName.trim()];
+
+        // Try with invited_people first
+        const { error: guestInsertError } = await supabase
+          .from("invited_guests")
+          .insert({
+            full_name: guestName.trim(),
+            seats_reserved:
+              attendance === "yes"
+                ? numberOfGuests
+                : 0,
+            invited_people: people,
+          });
+
+        // If invited_people column is not available yet,
+        // save without it so the search still works.
+        if (guestInsertError) {
+          console.warn(
+            "Could not save invited_people. Trying basic guest record.",
+            guestInsertError
+          );
+
+          const { error: fallbackGuestError } =
+            await supabase
+              .from("invited_guests")
+              .insert({
+                full_name: guestName.trim(),
+                seats_reserved:
+                  attendance === "yes"
+                    ? numberOfGuests
+                    : 0,
+              });
+
+          if (fallbackGuestError) {
+            console.error(
+              "Guest insert error:",
+              fallbackGuestError
+            );
+          }
+        }
       }
 
       setStep("success");
-      setLoading(false);
-      return;
-    }
+    } catch (err) {
+      console.error(err);
 
-    /*
-     * WALK-IN RSVP
-     */
-    if (step === "walkin") {
-      if (numberOfGuests > 2) {
-        setStatus("Walk-In RSVPs are limited to 2 guests.");
-        setGuests("2");
-        setLoading(false);
-        return;
-      }
-
-      const walkInMessage = `[WALK-IN RSVP]${
-        message.trim() ? ` ${message.trim()}` : ""
-      }`;
-
-      const { error } = await supabase.from("rsvps").insert({
-        guest_name: name,
-        email: email.trim(),
-        attendance,
-        guests: numberOfGuests,
-        message: walkInMessage,
-      });
-
-      if (error) {
-        console.error(error);
-
-        setStatus(`Unable to send RSVP: ${error.message}`);
-        setLoading(false);
-        return;
-      }
-
-      setStep("success");
-      setLoading(false);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again."
+      );
+    } finally {
+      setSubmitting(false);
     }
   }
 
-  /*
-   * START AGAIN
-   */
-  function startAgain() {
-    setStep("landing");
+  // --------------------------------------------------
+  // CALENDAR
+  // --------------------------------------------------
 
-    setSearchName("");
-    setGuestName("");
-    setEmail("");
-    setAttendance("attending");
-    setGuests("1");
-    setMessage("");
-
-    setInvitedName("");
-    setSeatsReserved(0);
-
-    setNotFound(false);
-    setStatus("");
-  }
-
-  /*
-   * GOOGLE CALENDAR
-   */
   function addToGoogleCalendar() {
-    const title = "Nezeal Ven & Shintal Khye Wedding";
-
-    const details =
-      "We are getting married! Dress code: Formal · Semi Formal";
-
-    const location = "E&J Grand Pavilion, DC, Bukidnon";
-
     const start = "20260423T160000";
     const end = "20260423T190000";
 
     const url =
       "https://calendar.google.com/calendar/render?action=TEMPLATE" +
-      `&text=${encodeURIComponent(title)}` +
-      `&dates=${start}/${end}` +
-      `&details=${encodeURIComponent(details)}` +
-      `&location=${encodeURIComponent(location)}`;
+      "&text=" +
+      encodeURIComponent(
+        "Nezeal Ven & Shintal Khye Wedding"
+      ) +
+      "&dates=" +
+      start +
+      "/" +
+      end +
+      "&details=" +
+      encodeURIComponent(
+        "We are getting married! We would love to celebrate this special day with you."
+      ) +
+      "&location=" +
+      encodeURIComponent(
+        "E&J Grand Pavilion, DC, Bukidnon"
+      );
 
     window.open(url, "_blank");
   }
 
-  /*
-   * DOWNLOAD CALENDAR
-   */
-  function downloadCalendarFile() {
-    const ics = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Nezeal and Shintal Wedding//EN
-BEGIN:VEVENT
-UID:nezeal-shintal-wedding@example.com
-DTSTAMP:20260906T000000Z
-DTSTART:20260423T160000
-DTEND:20260423T190000
-SUMMARY:Nezeal Ven & Shintal Khye Wedding
-DESCRIPTION:We are getting married! Dress code: Formal · Semi Formal
-LOCATION:E&J Grand Pavilion, DC, Bukidnon
-END:VEVENT
-END:VCALENDAR`;
+  function downloadCalendar() {
+    const calendar =
+      `BEGIN:VCALENDAR\r\n` +
+      `VERSION:2.0\r\n` +
+      `BEGIN:VEVENT\r\n` +
+      `DTSTART:20260423T160000\r\n` +
+      `DTEND:20260423T190000\r\n` +
+      `SUMMARY:Nezeal Ven & Shintal Khye Wedding\r\n` +
+      `LOCATION:E&J Grand Pavilion, DC, Bukidnon\r\n` +
+      `DESCRIPTION:We are getting married! We would love to celebrate this special day with you.\r\n` +
+      `END:VEVENT\r\n` +
+      `END:VCALENDAR`;
 
-    const blob = new Blob([ics], {
-      type: "text/calendar;charset=utf-8",
+    const blob = new Blob([calendar], {
+      type: "text/calendar",
     });
 
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
-
     link.href = url;
     link.download = "nezeal-shintal-wedding.ics";
-
-    document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
   }
 
-  /*
-   * ==========================================
-   * LANDING PAGE
-   * ==========================================
-   */
+  // --------------------------------------------------
+  // RESET
+  // --------------------------------------------------
+
+  function resetToSearch() {
+    setStep("search");
+    setInvitation(null);
+    setSearchName("");
+    setNotFound(false);
+    setError("");
+  }
+
+  function resetRSVP() {
+    setGuestName("");
+    setEmail("");
+    setPhone("");
+    setAttendance("yes");
+    setNumberOfGuests(1);
+    setGuestNames([""]);
+    setMessage("");
+    setError("");
+    setInvitation(null);
+    setSearchName("");
+  }
+
+  // --------------------------------------------------
+  // LANDING
+  // --------------------------------------------------
+
   if (step === "landing") {
     return (
-      <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] flex items-center justify-center px-6 relative overflow-hidden">
+      <main className="min-h-screen bg-[#f8f5ef] text-[#3d3a35]">
+        <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-16">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_#fffdf8,_transparent_60%)]" />
 
-        <div className="absolute -top-32 -left-32 w-80 h-80 rounded-full bg-[#eadfd2] opacity-50 blur-3xl" />
+          <div className="relative z-10 mx-auto max-w-3xl text-center">
+            <p className="mb-5 text-sm uppercase tracking-[0.35em] text-[#8b8175]">
+              Together with their families
+            </p>
 
-        <div className="absolute -bottom-32 -right-32 w-80 h-80 rounded-full bg-[#e4d4c2] opacity-50 blur-3xl" />
+            <div className="mb-6 flex justify-center">
+              <Heart
+                size={32}
+                strokeWidth={1}
+                className="text-[#9b8d7b]"
+              />
+            </div>
 
-        <div className="relative z-10 text-center max-w-2xl">
+            <p className="mb-4 font-serif text-lg italic text-[#817669]">
+              We are getting married
+            </p>
 
-          <p className="text-xs tracking-[0.45em] uppercase text-[#9a7654] mb-8">
-            Together with their families
-          </p>
+            <h1 className="font-serif text-5xl leading-tight md:text-7xl">
+              Nezeal Ven
+              <span className="mx-3 text-[#a99b89]">
+                &
+              </span>
+              Shintal Khye
+            </h1>
 
-          <p className="font-serif text-lg md:text-xl text-[#756d63] mb-6">
-            We joyfully invite you to celebrate
-          </p>
+            <div className="mx-auto my-8 h-px w-24 bg-[#b9ad9d]" />
 
-          <h1 className="font-serif text-5xl md:text-7xl text-[#9a7654] tracking-wide">
-            Nezeal Ven
-          </h1>
+            <p className="mb-2 text-lg tracking-wide">
+              April 23, 2026
+            </p>
 
-          <p className="font-serif text-3xl md:text-4xl my-3 text-[#756d63]">
-            &
-          </p>
+            <p className="mb-10 text-[#82786c]">
+              4:00 PM · E&J Grand Pavilion
+            </p>
 
-          <h1 className="font-serif text-5xl md:text-7xl text-[#9a7654] tracking-wide">
-            Shintal Khye
-          </h1>
-
-          <div className="my-8 flex items-center justify-center gap-4">
-            <div className="h-px w-16 bg-[#c9b49e]" />
-
-            <span className="text-[#9a7654] text-lg">♡</span>
-
-            <div className="h-px w-16 bg-[#c9b49e]" />
+            <button
+              onClick={() => setStep("search")}
+              className="rounded-full bg-[#4b4741] px-10 py-4 text-sm uppercase tracking-[0.2em] text-white transition hover:bg-[#35322e]"
+            >
+              Open Invitation
+            </button>
           </div>
-
-          <p className="font-serif text-2xl md:text-3xl">
-            Are getting married
-          </p>
-
-          <p className="mt-5 text-sm tracking-[0.2em] uppercase text-[#756d63]">
-            April 23, 2026 · 4:00 PM
-          </p>
-
-          <button
-            type="button"
-            onClick={openInvitation}
-            className="mt-12 rounded-full border border-[#9a7654] px-10 py-4 text-xs tracking-[0.3em] uppercase text-[#9a7654] hover:bg-[#9a7654] hover:text-white transition-all duration-500"
-          >
-            Open Invitation
-          </button>
-
-          <p className="mt-5 text-xs text-[#8a8177]">
-            We would love to celebrate this special day with you.
-          </p>
-
-        </div>
+        </section>
       </main>
     );
   }
 
-  /*
-   * ==========================================
-   * FIND INVITATION
-   * ==========================================
-   */
+  // --------------------------------------------------
+  // SEARCH
+  // --------------------------------------------------
+
   if (step === "search") {
     return (
-      <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] px-6 py-16 flex items-center justify-center">
+      <main className="min-h-screen bg-[#f8f5ef] px-6 py-16 text-[#3d3a35]">
+        <div className="mx-auto max-w-xl">
+          <button
+            onClick={() => setStep("landing")}
+            className="mb-12 flex items-center gap-2 text-sm text-[#82786c]"
+          >
+            <ChevronLeft size={16} />
+            Back
+          </button>
 
-        <div className="w-full max-w-xl">
-
-          <div className="text-center mb-12">
-
-            <p className="text-xs tracking-[0.4em] uppercase text-[#9a7654] mb-5">
-              Your Invitation
+          <div className="text-center">
+            <p className="mb-3 text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
+              Your invitation
             </p>
 
-            <h1 className="font-serif text-5xl md:text-6xl">
+            <h2 className="font-serif text-4xl md:text-5xl">
               Find Your Invitation
-            </h1>
+            </h2>
 
-            <p className="mt-5 text-[#756d63]">
-              Please enter the name exactly as it appears on your invitation.
+            <p className="mx-auto mt-5 max-w-md leading-7 text-[#777067]">
+              Please enter the name used on your invitation
+              so we can find your reserved seats.
             </p>
 
-          </div>
-
-          <div className="bg-white rounded-3xl p-8 md:p-10 shadow-sm">
-
-            <form onSubmit={searchInvitation} className="space-y-8">
-
-              <div>
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Name on Invitation
-                </label>
+            <form
+              onSubmit={searchInvitation}
+              className="mt-10"
+            >
+              <div className="relative">
+                <Search
+                  size={20}
+                  className="absolute left-5 top-1/2 -translate-y-1/2 text-[#9b9185]"
+                />
 
                 <input
-                  type="text"
                   value={searchName}
-                  onChange={(e) => {
-                    setSearchName(e.target.value);
-                    setNotFound(false);
-                    setStatus("");
-                  }}
-                  placeholder="Enter your full name"
-                  required
-                  autoFocus
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-4 outline-none focus:border-[#29251f] text-lg"
+                  onChange={(e) =>
+                    setSearchName(e.target.value)
+                  }
+                  placeholder="Enter your name"
+                  className="w-full rounded-full border border-[#d8d0c5] bg-white px-14 py-4 outline-none transition focus:border-[#8d8173]"
                 />
               </div>
 
-              {notFound && (
-                <div className="rounded-2xl bg-[#f8f5ef] p-6 text-center">
+              {error && (
+                <p className="mt-3 text-sm text-red-600">
+                  {error}
+                </p>
+              )}
 
-                  <p className="text-xs tracking-[0.25em] uppercase text-[#9a7654]">
-                    Invitation Not Found
+              {notFound && (
+                <div className="mt-8 rounded-2xl border border-[#ded5c9] bg-white p-7 text-center">
+                  <p className="font-serif text-2xl">
+                    We couldn't find your invitation.
                   </p>
 
-                  <h2 className="font-serif text-2xl mt-3">
-                    We couldn't find your invitation
-                  </h2>
-
-                  <p className="text-sm text-[#756d63] mt-3 leading-6">
-                    Please check the spelling of your name. If you do not have
-                    an invitation, you can continue as a Walk-In guest.
+                  <p className="mt-3 text-sm leading-6 text-[#777067]">
+                    You can still RSVP as a guest below.
                   </p>
 
                   <button
                     type="button"
-                    onClick={continueAsWalkIn}
-                    className="mt-6 w-full rounded-full bg-[#29251f] text-white py-4 text-xs tracking-[0.25em] uppercase hover:bg-[#3b352e] transition"
+                    onClick={() => {
+                      resetRSVP();
+                      setGuestName(searchName.trim());
+                      setStep("guest-rsvp");
+                    }}
+                    className="mt-6 rounded-full bg-[#4b4741] px-8 py-3 text-sm uppercase tracking-[0.15em] text-white"
                   >
-                    RSVP as Walk-In
+                    Guest RSVP
                   </button>
-
                 </div>
-              )}
-
-              {status && (
-                <p className="text-center text-sm text-red-600">
-                  {status}
-                </p>
               )}
 
               {!notFound && (
                 <button
                   type="submit"
                   disabled={searching}
-                  className="w-full rounded-full bg-[#29251f] text-white py-5 text-xs tracking-[0.3em] uppercase hover:bg-[#3b352e] transition disabled:opacity-50"
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-[#4b4741] px-8 py-4 text-sm uppercase tracking-[0.18em] text-white disabled:opacity-60"
                 >
-                  {searching ? "Searching..." : "Find My Invitation"}
+                  <Search size={17} />
+                  {searching
+                    ? "Searching..."
+                    : "Search Invitation"}
                 </button>
               )}
-
             </form>
-
           </div>
-
-          <button
-            type="button"
-            onClick={startAgain}
-            className="block mx-auto mt-8 text-xs tracking-[0.2em] uppercase text-[#9a7654]"
-          >
-            ← Back
-          </button>
-
         </div>
       </main>
     );
   }
 
-  /*
-   * ==========================================
-   * INVITATION FOUND
-   * ==========================================
-   */
-  if (step === "found") {
+  // --------------------------------------------------
+  // FOUND INVITATION
+  // --------------------------------------------------
+
+  if (step === "found" && invitation) {
     return (
-      <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] px-6 py-16 flex items-center justify-center">
+      <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
+        <div className="mx-auto max-w-2xl">
+          <button
+            onClick={resetToSearch}
+            className="mb-10 flex items-center gap-2 text-sm text-[#82786c]"
+          >
+            <ChevronLeft size={16} />
+            Search again
+          </button>
 
-        <div className="w-full max-w-2xl">
-
-          <div className="text-center mb-10">
-
-            <p className="text-xs tracking-[0.4em] uppercase text-[#9a7654] mb-5">
-              Invitation Found
-            </p>
-
-            <h1 className="font-serif text-5xl md:text-6xl">
-              Welcome, {invitedName}
-            </h1>
-
-            <p className="mt-5 text-[#756d63]">
-              We are so happy to have you celebrate with us.
-            </p>
-
-          </div>
-
-          <div className="bg-white rounded-3xl p-8 md:p-12 shadow-sm">
-
+          <div className="rounded-[2rem] border border-[#ded6ca] bg-white p-8 shadow-sm md:p-12">
             <div className="text-center">
-
-              <p className="text-xs tracking-[0.3em] uppercase text-[#9a7654]">
-                You Are Invited
+              <p className="text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
+                You are invited
               </p>
 
-              <h2 className="font-serif text-3xl md:text-4xl mt-5">
-                Nezeal Ven & Shintal Khye
-              </h2>
+              <h1 className="mt-5 font-serif text-4xl md:text-5xl">
+                {invitation.full_name}
+              </h1>
 
-              <div className="my-8 flex items-center justify-center gap-4">
-                <div className="h-px w-16 bg-[#c9b49e]" />
+              <div className="mx-auto my-7 h-px w-20 bg-[#c9bdad]" />
 
-                <span className="text-[#9a7654]">♡</span>
+              <p className="font-serif text-2xl italic text-[#817669]">
+                to celebrate with us
+              </p>
+            </div>
 
-                <div className="h-px w-16 bg-[#c9b49e]" />
+            <div className="mt-10 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl bg-[#f8f5ef] p-5">
+                <Calendar
+                  size={21}
+                  className="mb-3 text-[#8e8275]"
+                />
+                <p className="text-xs uppercase tracking-widest text-[#9b9185]">
+                  Date
+                </p>
+                <p className="mt-2 font-medium">
+                  April 23, 2026
+                </p>
               </div>
 
-              <p className="text-sm text-[#756d63]">
-                April 23, 2026 · 4:00 PM
-              </p>
+              <div className="rounded-2xl bg-[#f8f5ef] p-5">
+                <Clock
+                  size={21}
+                  className="mb-3 text-[#8e8275]"
+                />
+                <p className="text-xs uppercase tracking-widest text-[#9b9185]">
+                  Time
+                </p>
+                <p className="mt-2 font-medium">
+                  4:00 PM
+                </p>
+              </div>
 
-              <p className="mt-2 text-sm text-[#756d63]">
-                E&J Grand Pavilion
-              </p>
+              <div className="rounded-2xl bg-[#f8f5ef] p-5">
+                <MapPin
+                  size={21}
+                  className="mb-3 text-[#8e8275]"
+                />
+                <p className="text-xs uppercase tracking-widest text-[#9b9185]">
+                  Venue
+                </p>
+                <p className="mt-2 font-medium">
+                  E&J Grand Pavilion
+                </p>
+                <p className="mt-1 text-sm text-[#777067]">
+                  DC, Bukidnon
+                </p>
+              </div>
 
-              <p className="text-sm text-[#756d63]">
-                DC, Bukidnon
-              </p>
-
+              <div className="rounded-2xl bg-[#f8f5ef] p-5">
+                <Users
+                  size={21}
+                  className="mb-3 text-[#8e8275]"
+                />
+                <p className="text-xs uppercase tracking-widest text-[#9b9185]">
+                  Reserved Seats
+                </p>
+                <p className="mt-2 font-medium">
+                  {invitation.seats_reserved}{" "}
+                  {invitation.seats_reserved === 1
+                    ? "seat"
+                    : "seats"}
+                </p>
+              </div>
             </div>
 
-            <div className="mt-10 rounded-2xl bg-[#f8f5ef] p-7 text-center">
+            <div className="mt-8 rounded-2xl border border-[#ded6ca] p-6">
+              <div className="flex items-center gap-3">
+                <Users
+                  size={20}
+                  className="text-[#8e8275]"
+                />
 
-              <p className="text-xs tracking-[0.25em] uppercase text-[#9a7654]">
-                Your Invitation
-              </p>
+                <h3 className="font-serif text-2xl">
+                  Who is Joining
+                </h3>
+              </div>
 
-              <p className="font-serif text-4xl mt-3">
-                {seatsReserved}
-              </p>
+              <div className="mt-5 space-y-3">
+                {invitation.invited_people.map(
+                  (person, index) => (
+                    <div
+                      key={`${person}-${index}`}
+                      className="flex items-center gap-3 rounded-xl bg-[#f8f5ef] px-4 py-3"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-sm">
+                        {index + 1}
+                      </div>
 
-              <p className="text-sm uppercase tracking-[0.15em] text-[#756d63] mt-1">
-                {seatsReserved === 1 ? "Seat Reserved" : "Seats Reserved"}
-              </p>
-
+                      <span>{person}</span>
+                    </div>
+                  )
+                )}
+              </div>
             </div>
 
-            {/* TEMPORARY WHO IS JOINING */}
-            <div className="mt-8 text-center">
-
-              <p className="text-xs tracking-[0.25em] uppercase text-[#9a7654]">
-                Joining You
+            <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6 text-center">
+              <p className="font-serif text-2xl">
+                We can't wait to celebrate with you.
               </p>
 
-              <p className="font-serif text-xl mt-3">
-                {invitedName}
+              <p className="mt-3 text-sm leading-6 text-[#777067]">
+                RSVP deadline: April 5, 2026
               </p>
-
-              <p className="text-xs text-[#8a8177] mt-2">
-                Your invited guest list can be connected here next.
-              </p>
-
             </div>
 
-            <button
-              type="button"
-              onClick={continueToRSVP}
-              className="mt-10 w-full rounded-full bg-[#29251f] text-white py-5 text-xs tracking-[0.3em] uppercase hover:bg-[#3b352e] transition"
-            >
-              Continue to RSVP
-            </button>
+            <div className="mt-8 grid gap-3 md:grid-cols-2">
+              <button
+                onClick={addToGoogleCalendar}
+                className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
+              >
+                <Calendar size={17} />
+                Add to Google Calendar
+              </button>
 
+              <button
+                onClick={downloadCalendar}
+                className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
+              >
+                <Calendar size={17} />
+                Download Calendar
+              </button>
+            </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setStep("search")}
-            className="block mx-auto mt-8 text-xs tracking-[0.2em] uppercase text-[#9a7654]"
-          >
-            ← Search Again
-          </button>
-
         </div>
       </main>
     );
   }
 
-  /*
-   * ==========================================
-   * RSVP FORM
-   * ==========================================
-   */
-  if (step === "rsvp" || step === "walkin") {
-    const isWalkIn = step === "walkin";
+  // --------------------------------------------------
+  // GUEST RSVP
+  // --------------------------------------------------
 
+  if (step === "guest-rsvp") {
     return (
-      <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] px-6 py-16">
+      <main className="min-h-screen bg-[#f8f5ef] px-6 py-14 text-[#3d3a35]">
+        <div className="mx-auto max-w-2xl">
+          <button
+            onClick={resetToSearch}
+            className="mb-10 flex items-center gap-2 text-sm text-[#82786c]"
+          >
+            <ChevronLeft size={16} />
+            Search again
+          </button>
 
-        <div className="max-w-3xl mx-auto">
+          <div className="rounded-[2rem] border border-[#ded6ca] bg-white p-8 shadow-sm md:p-12">
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
+                Guest RSVP
+              </p>
 
-          <section className="text-center mb-12">
+              <h1 className="mt-4 font-serif text-4xl">
+                We'd love to hear from you
+              </h1>
 
-            <p className="text-xs tracking-[0.4em] uppercase text-[#9a7654] mb-5">
-              {isWalkIn ? "Walk-In RSVP" : "Kindly Respond"}
-            </p>
-
-            <h1 className="font-serif text-5xl md:text-6xl">
-              {isWalkIn
-                ? "We'd Love to Hear From You"
-                : "Will you celebrate with us?"}
-            </h1>
-
-            <p className="mt-5 text-[#756d63]">
-              {isWalkIn
-                ? "Please complete the form below to RSVP as a Walk-In guest."
-                : `Your invitation includes ${seatsReserved} ${
-                    seatsReserved === 1 ? "seat" : "seats"
-                  }.`}
-            </p>
-
-          </section>
-
-          <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm">
-
-            {!isWalkIn && (
-              <div className="rounded-2xl bg-[#f8f5ef] p-5 text-center mb-8">
-
-                <p className="text-xs tracking-[0.25em] uppercase text-[#9a7654]">
-                  Invitation
-                </p>
-
-                <p className="font-serif text-2xl mt-2">
-                  {invitedName}
-                </p>
-
-                <p className="text-sm text-[#756d63] mt-1">
-                  {seatsReserved}{" "}
-                  {seatsReserved === 1 ? "seat" : "seats"} reserved
-                </p>
-
-              </div>
-            )}
-
-            {isWalkIn && (
-              <div className="rounded-2xl bg-[#f8f5ef] p-5 text-center mb-8">
-
-                <p className="text-xs tracking-[0.25em] uppercase text-[#9a7654]">
-                  Walk-In Guest
-                </p>
-
-                <p className="text-sm text-[#756d63] mt-2">
-                  Walk-In RSVPs are limited to 2 guests.
-                </p>
-
-              </div>
-            )}
+              <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-[#777067]">
+                We couldn't find your invitation, but you
+                are still welcome to RSVP as a guest.
+              </p>
+            </div>
 
             <form
               onSubmit={submitRSVP}
-              className="space-y-7"
+              className="mt-10 space-y-7"
             >
-
-              {/* NAME */}
               <div>
-
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Your Name
+                <label className="mb-2 block text-sm font-medium">
+                  Your Name *
                 </label>
 
                 <input
-                  type="text"
+                  required
                   value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  required
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
+                  onChange={(e) =>
+                    setGuestName(e.target.value)
+                  }
+                  placeholder="Full name"
+                  className="w-full rounded-xl border border-[#d8d0c5] bg-white px-4 py-3 outline-none focus:border-[#8d8173]"
                 />
-
               </div>
 
-              {/* EMAIL */}
-              <div>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Email
+                  </label>
 
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Email
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) =>
+                      setEmail(e.target.value)
+                    }
+                    placeholder="you@example.com"
+                    className="w-full rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Phone
+                  </label>
+
+                  <input
+                    value={phone}
+                    onChange={(e) =>
+                      setPhone(e.target.value)
+                    }
+                    placeholder="Contact number"
+                    className="w-full rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-3 block text-sm font-medium">
+                  Will you be joining us? *
                 </label>
 
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="you@example.com"
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
-                />
+                <div className="grid gap-3 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAttendance("yes")
+                    }
+                    className={`rounded-xl border p-4 text-left ${
+                      attendance === "yes"
+                        ? "border-[#625b52] bg-[#f8f5ef]"
+                        : "border-[#ddd5ca]"
+                    }`}
+                  >
+                    <p className="font-medium">
+                      Yes, I'll be there
+                    </p>
+                    <p className="mt-1 text-xs text-[#777067]">
+                      We look forward to seeing you.
+                    </p>
+                  </button>
 
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAttendance("no")
+                    }
+                    className={`rounded-xl border p-4 text-left ${
+                      attendance === "no"
+                        ? "border-[#625b52] bg-[#f8f5ef]"
+                        : "border-[#ddd5ca]"
+                    }`}
+                  >
+                    <p className="font-medium">
+                      Sorry, I can't make it
+                    </p>
+                    <p className="mt-1 text-xs text-[#777067]">
+                      We'll miss celebrating with you.
+                    </p>
+                  </button>
+                </div>
               </div>
 
-              {/* ATTENDANCE */}
+              {attendance === "yes" && (
+                <>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      Number of Guests
+                    </label>
+
+                    <select
+                      value={numberOfGuests}
+                      onChange={(e) =>
+                        updateNumberOfGuests(
+                          Number(e.target.value)
+                        )
+                      }
+                      className="w-full rounded-xl border border-[#d8d0c5] bg-white px-4 py-3 outline-none"
+                    >
+                      {Array.from(
+                        { length: 10 },
+                        (_, index) => index + 1
+                      ).map((number) => (
+                        <option
+                          key={number}
+                          value={number}
+                        >
+                          {number}{" "}
+                          {number === 1
+                            ? "Guest"
+                            : "Guests"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-3 block text-sm font-medium">
+                      Who is joining?
+                    </label>
+
+                    <div className="space-y-3">
+                      {guestNames.map(
+                        (name, index) => (
+                          <input
+                            key={index}
+                            required
+                            value={name}
+                            onChange={(e) =>
+                              updateGuestName(
+                                index,
+                                e.target.value
+                              )
+                            }
+                            placeholder={`Guest ${
+                              index + 1
+                            } name`}
+                            className="w-full rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
+                          />
+                        )
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div>
-
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Attendance
-                </label>
-
-                <select
-                  value={attendance}
-                  onChange={(e) => setAttendance(e.target.value)}
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
-                >
-
-                  <option value="attending">
-                    Joyfully attending
-                  </option>
-
-                  <option value="declining">
-                    Regretfully declining
-                  </option>
-
-                </select>
-
-              </div>
-
-              {/* NUMBER OF GUESTS */}
-              <div>
-
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Number of Guests
-                </label>
-
-                <select
-                  value={guests}
-                  onChange={(e) => setGuests(e.target.value)}
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
-                >
-
-                  <option value="1">
-                    1 Guest
-                  </option>
-
-                  <option value="2">
-                    2 Guests
-                  </option>
-
-                </select>
-
-              </div>
-
-              {/* MESSAGE */}
-              <div>
-
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Message (Optional)
+                <label className="mb-2 block text-sm font-medium">
+                  Message
                 </label>
 
                 <textarea
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={(e) =>
+                    setMessage(e.target.value)
+                  }
                   rows={4}
-                  placeholder="A little note for the couple..."
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none resize-none"
+                  placeholder="Leave a message for the couple..."
+                  className="w-full resize-none rounded-xl border border-[#d8d0c5] px-4 py-3 outline-none focus:border-[#8d8173]"
                 />
-
               </div>
 
-              {status && (
-                <div className="text-center text-sm text-red-600">
-                  {status}
+              {error && (
+                <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">
+                  {error}
                 </div>
               )}
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full rounded-full bg-[#29251f] text-white py-5 text-xs tracking-[0.3em] uppercase hover:bg-[#3b352e] transition disabled:opacity-50"
+                disabled={submitting}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#4b4741] px-8 py-4 text-sm uppercase tracking-[0.18em] text-white transition hover:bg-[#35322e] disabled:opacity-60"
               >
-                {loading ? "Sending RSVP..." : "Send RSVP"}
+                {submitting ? (
+                  "Submitting..."
+                ) : (
+                  <>
+                    <Check size={17} />
+                    Submit RSVP
+                  </>
+                )}
               </button>
-
             </form>
-
-            {isWalkIn && (
-              <button
-                type="button"
-                onClick={() => {
-                  setStep("search");
-                  setNotFound(false);
-                  setStatus("");
-                }}
-                className="block mx-auto mt-8 text-xs tracking-[0.2em] uppercase text-[#9a7654]"
-              >
-                ← Check My Invitation Again
-              </button>
-            )}
-
-          </section>
-
+          </div>
         </div>
       </main>
     );
   }
 
-  /*
-   * ==========================================
-   * SUCCESS
-   * ==========================================
-   */
+  // --------------------------------------------------
+  // SUCCESS
+  // --------------------------------------------------
+
   if (step === "success") {
     return (
-      <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] px-6 py-16 flex items-center justify-center">
-
-        <div className="w-full max-w-xl text-center">
-
-          <div className="text-5xl mb-8">
-            ♡
+      <main className="flex min-h-screen items-center justify-center bg-[#f8f5ef] px-6 py-16 text-[#3d3a35]">
+        <div className="w-full max-w-xl rounded-[2rem] border border-[#ded6ca] bg-white p-10 text-center shadow-sm md:p-14">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#f0ece5]">
+            <Check size={30} />
           </div>
 
-          <p className="text-xs tracking-[0.4em] uppercase text-[#9a7654] mb-5">
+          <p className="mt-8 text-xs uppercase tracking-[0.3em] text-[#9b8d7b]">
             RSVP Received
           </p>
 
-          <h1 className="font-serif text-5xl md:text-6xl">
-            Thank You!
+          <h1 className="mt-4 font-serif text-4xl md:text-5xl">
+            Thank You, {guestName}!
           </h1>
 
-          <p className="font-serif text-2xl mt-5">
-            {step === "success" && invitedName
-              ? `${invitedName}, we're so happy you'll be celebrating with us.`
-              : "We're so happy to celebrate with you."}
+          <p className="mx-auto mt-5 max-w-md leading-7 text-[#777067]">
+            Your RSVP has been successfully recorded.
+            We are so happy to hear from you and look
+            forward to celebrating together.
           </p>
 
-          <p className="text-[#756d63] mt-5">
-            Your RSVP has been successfully received.
-          </p>
-
-          <div className="mt-10 bg-white rounded-3xl p-8 shadow-sm">
-
+          <div className="mt-8 rounded-2xl bg-[#f8f5ef] p-6">
             <p className="font-serif text-2xl">
-              Nezeal Ven & Shintal Khye
+              April 23, 2026
             </p>
 
-            <p className="mt-4 text-sm text-[#756d63]">
-              April 23, 2026 · 4:00 PM
+            <p className="mt-2 text-sm text-[#777067]">
+              4:00 PM · E&J Grand Pavilion
             </p>
-
-            <p className="text-sm text-[#756d63]">
-              E&J Grand Pavilion
-            </p>
-
-            <p className="text-sm text-[#756d63]">
-              DC, Bukidnon
-            </p>
-
           </div>
 
-          <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
-
+          <div className="mt-8 grid gap-3 md:grid-cols-2">
             <button
-              type="button"
               onClick={addToGoogleCalendar}
-              className="bg-[#29251f] text-white rounded-full px-6 py-3 text-sm tracking-[0.12em] uppercase hover:bg-[#3b352e] transition"
+              className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
             >
-              Add to Google Calendar
+              <Calendar size={17} />
+              Google Calendar
             </button>
 
             <button
-              type="button"
-              onClick={downloadCalendarFile}
-              className="border border-[#29251f] text-[#29251f] rounded-full px-6 py-3 text-sm tracking-[0.12em] uppercase hover:bg-white transition"
+              onClick={downloadCalendar}
+              className="flex items-center justify-center gap-2 rounded-full border border-[#cfc5b8] px-5 py-3 text-sm"
             >
+              <Calendar size={17} />
               Download Calendar
             </button>
-
           </div>
 
           <button
-            type="button"
-            onClick={startAgain}
-            className="mt-10 text-xs tracking-[0.2em] uppercase text-[#9a7654] underline underline-offset-4"
+            onClick={() => {
+              resetRSVP();
+              setStep("search");
+            }}
+            className="mt-8 text-sm text-[#817669] underline underline-offset-4"
           >
-            Return to Invitation
+            Search invitation again
           </button>
-
         </div>
       </main>
     );
