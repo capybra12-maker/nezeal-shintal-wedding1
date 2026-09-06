@@ -4,134 +4,28 @@ import { FormEvent, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
-  /* =================================================
-     OPENING INVITATION
-  ================================================= */
-
   const [opened, setOpened] = useState(false);
 
-  /* =================================================
-     INVITATION SEARCH
-  ================================================= */
-
-  const [searchName, setSearchName] = useState("");
-  const [invitationFound, setInvitationFound] = useState(false);
-  const [invitationError, setInvitationError] = useState("");
-  const [matchedGuest, setMatchedGuest] = useState("");
-  const [seatsReserved, setSeatsReserved] = useState(2);
-
-  const [searching, setSearching] = useState(false);
-
-  /* =================================================
-     WALK-IN
-  ================================================= */
-
+  // RSVP mode
   const [walkIn, setWalkIn] = useState(false);
 
-  /* =================================================
-     RSVP FORM
-  ================================================= */
+  // Show Walk-In option only after invitation search fails
+  const [invitationNotFound, setInvitationNotFound] = useState(false);
 
+  // Guest information
   const [guestName, setGuestName] = useState("");
   const [email, setEmail] = useState("");
   const [attendance, setAttendance] = useState("attending");
   const [guests, setGuests] = useState("1");
   const [message, setMessage] = useState("");
 
+  // Status
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* =================================================
-     FIND INVITATION FROM SUPABASE
-  ================================================= */
-
-  async function findInvitation() {
-    const search = searchName.trim();
-
-    setInvitationError("");
-    setInvitationFound(false);
-    setMatchedGuest("");
-
-    if (!search) {
-      setInvitationError("Please enter your name.");
-      return;
-    }
-
-    if (!supabase) {
-      setInvitationError("Database is not configured.");
-      return;
-    }
-
-    setSearching(true);
-
-    const { data, error } = await supabase
-      .from("invited_guests")
-      .select("full_name, seats_reserved")
-      .ilike("full_name", search)
-      .maybeSingle();
-
-    setSearching(false);
-
-    if (error) {
-      console.error(error);
-
-      setInvitationError(
-        "We couldn't check your invitation right now. Please try again."
-      );
-
-      return;
-    }
-
-    if (!data) {
-      setInvitationError(
-        "We couldn't find an invitation under that name. Please check the spelling or choose the Walk-In RSVP option below."
-      );
-
-      return;
-    }
-
-    const reservedSeats = Number(data.seats_reserved) || 2;
-
-    setInvitationFound(true);
-    setWalkIn(false);
-
-    setMatchedGuest(data.full_name);
-    setSeatsReserved(reservedSeats);
-
-    setGuestName(data.full_name);
-
-    /*
-      Start with 1 guest.
-      If invitation only has 1 seat, keep it at 1.
-    */
-    setGuests("1");
-
-    setStatus("");
-  }
-
-  /* =================================================
-     OPEN WALK-IN RSVP
-  ================================================= */
-
-  function openWalkInRSVP() {
-    setWalkIn(true);
-    setInvitationFound(false);
-
-    setMatchedGuest("");
-    setSearchName("");
-    setInvitationError("");
-
-    setSeatsReserved(2);
-
-    setGuestName("");
-    setGuests("1");
-
-    setStatus("");
-  }
-
-  /* =================================================
-     SUBMIT RSVP
-  ================================================= */
+  // Invitation information
+  const [seatsReserved, setSeatsReserved] = useState<number | null>(null);
+  const [invitedName, setInvitedName] = useState("");
 
   async function submitRSVP(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -139,36 +33,10 @@ export default function Home() {
     setLoading(true);
     setStatus("");
 
-    if (!invitationFound && !walkIn) {
-      setStatus(
-        "Please find your invitation or choose the Walk-In RSVP option."
-      );
+    const name = guestName.trim();
 
-      setLoading(false);
-      return;
-    }
-
-    const numberOfGuests = Number(guests);
-
-    /*
-      Invited guests:
-      Use the exact number of seats from Supabase.
-
-      Walk-ins:
-      Maximum of 2 guests.
-    */
-
-    const maximumGuests = walkIn ? 2 : seatsReserved;
-
-    if (numberOfGuests > maximumGuests) {
-      setStatus(
-        `Your invitation allows a maximum of ${maximumGuests} ${
-          maximumGuests === 1 ? "guest" : "guests"
-        }.`
-      );
-
-      setGuests(String(maximumGuests));
-
+    if (!name) {
+      setStatus("Please enter your full name.");
       setLoading(false);
       return;
     }
@@ -180,21 +48,119 @@ export default function Home() {
     }
 
     /*
-      Mark walk-in RSVPs in the message field.
+     * WALK-IN RSVP
+     * This happens only after the guest chooses
+     * "RSVP as Walk-In".
+     */
+    if (walkIn) {
+      const numberOfGuests = Number(guests);
 
-      We don't need another database column.
-    */
+      if (numberOfGuests > 2) {
+        setStatus("Walk-In RSVPs are limited to 2 guests.");
+        setGuests("2");
+        setLoading(false);
+        return;
+      }
 
-    const finalMessage = walkIn
-      ? `[WALK-IN RSVP]${message ? ` ${message}` : ""}`
-      : message || null;
+      const finalMessage = `[WALK-IN RSVP]${
+        message ? ` ${message}` : ""
+      }`;
 
+      const { error } = await supabase.from("rsvps").insert({
+        guest_name: name,
+        email: email.trim(),
+        attendance: attendance,
+        guests: numberOfGuests,
+        message: finalMessage,
+      });
+
+      if (error) {
+        console.error(error);
+
+        setStatus(`Unable to send RSVP: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      setStatus("Thank you! Your Walk-In RSVP has been received. ❤️");
+
+      setLoading(false);
+      return;
+    }
+
+    /*
+     * INVITED GUEST RSVP
+     *
+     * Search the name in invited_guests AFTER
+     * the guest has filled out the form.
+     */
+    const { data, error: invitationError } = await supabase
+      .from("invited_guests")
+      .select("full_name, seats_reserved")
+      .ilike("full_name", name)
+      .maybeSingle();
+
+    if (invitationError) {
+      console.error(invitationError);
+
+      setStatus(
+        "We couldn't check your invitation right now. Please try again."
+      );
+
+      setLoading(false);
+      return;
+    }
+
+    /*
+     * NAME NOT FOUND
+     *
+     * Don't reject immediately.
+     * Show the Walk-In option.
+     */
+    if (!data) {
+      setInvitationNotFound(true);
+      setStatus("");
+
+      setLoading(false);
+      return;
+    }
+
+    /*
+     * INVITATION FOUND
+     */
+    const reservedSeats = Number(data.seats_reserved) || 1;
+    const numberOfGuests = Number(guests);
+
+    setSeatsReserved(reservedSeats);
+    setInvitedName(data.full_name);
+    setInvitationNotFound(false);
+
+    /*
+     * If guest selected more guests than their invitation allows,
+     * don't submit yet.
+     */
+    if (numberOfGuests > reservedSeats) {
+      setStatus(
+        `Your invitation is reserved for ${reservedSeats} ${
+          reservedSeats === 1 ? "guest" : "guests"
+        }.`
+      );
+
+      setGuests(String(reservedSeats));
+
+      setLoading(false);
+      return;
+    }
+
+    /*
+     * Save invited guest RSVP.
+     */
     const { error } = await supabase.from("rsvps").insert({
-      guest_name: guestName.trim(),
+      guest_name: data.full_name,
       email: email.trim(),
       attendance: attendance,
       guests: numberOfGuests,
-      message: finalMessage,
+      message: message || null,
     });
 
     if (error) {
@@ -206,24 +172,44 @@ export default function Home() {
       return;
     }
 
-    setStatus("Thank you! Your RSVP has been received. ❤️");
+    setStatus(
+      `Thank you, ${data.full_name}! Your RSVP has been received. ❤️`
+    );
 
-    /*
-      Reset form
-    */
+    setLoading(false);
+  }
 
+  function resetForm() {
     setGuestName("");
     setEmail("");
     setAttendance("attending");
     setGuests("1");
     setMessage("");
-
-    setLoading(false);
+    setSeatsReserved(null);
+    setInvitedName("");
+    setInvitationNotFound(false);
+    setStatus("");
   }
 
-  /* =================================================
-     GOOGLE CALENDAR
-  ================================================= */
+  /*
+   * Guest chooses Walk-In AFTER their invitation
+   * could not be found.
+   */
+  function chooseWalkIn() {
+    setWalkIn(true);
+    setInvitationNotFound(false);
+    setSeatsReserved(null);
+    setInvitedName("");
+    setStatus("");
+  }
+
+  function backToInvitationRSVP() {
+    setWalkIn(false);
+    setInvitationNotFound(false);
+    setSeatsReserved(null);
+    setInvitedName("");
+    setStatus("");
+  }
 
   function addToGoogleCalendar() {
     const title = "Nezeal Ven & Shintal Khye Wedding";
@@ -245,10 +231,6 @@ export default function Home() {
 
     window.open(url, "_blank");
   }
-
-  /* =================================================
-     DOWNLOAD CALENDAR FILE
-  ================================================= */
 
   function downloadCalendarFile() {
     const ics = `BEGIN:VCALENDAR
@@ -277,28 +259,20 @@ END:VCALENDAR`;
     link.download = "nezeal-shintal-wedding.ics";
 
     document.body.appendChild(link);
-
     link.click();
-
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
   }
 
-  /* =================================================
-     OPENING INVITATION SCREEN
-  ================================================= */
-
   if (!opened) {
     return (
       <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] flex items-center justify-center px-6 relative overflow-hidden">
-
         <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#eadfd2] opacity-40 blur-3xl" />
 
         <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-[#e4d4c2] opacity-40 blur-3xl" />
 
         <div className="relative z-10 text-center max-w-xl">
-
           <p className="text-xs tracking-[0.45em] uppercase text-[#9a7654] mb-8 animate-pulse">
             Together with their families
           </p>
@@ -320,15 +294,11 @@ END:VCALENDAR`;
           </h1>
 
           <div className="my-8 flex items-center justify-center gap-4">
-
             <div className="h-px w-16 bg-[#c9b49e]" />
 
-            <span className="text-[#9a7654] text-lg">
-              ♡
-            </span>
+            <span className="text-[#9a7654] text-lg">♡</span>
 
             <div className="h-px w-16 bg-[#c9b49e]" />
-
           </div>
 
           <p className="font-serif text-2xl md:text-3xl">
@@ -350,27 +320,17 @@ END:VCALENDAR`;
           <p className="mt-5 text-xs text-[#8a8177]">
             We would love to celebrate this special day with you.
           </p>
-
         </div>
       </main>
     );
   }
 
-  /* =================================================
-     MAIN PAGE
-  ================================================= */
-
   return (
     <main className="min-h-screen bg-[#f8f5ef] text-[#29251f] px-6 py-16">
-
       <div className="max-w-3xl mx-auto">
 
-        {/* =================================================
-           HEADER
-        ================================================= */}
-
+        {/* RSVP HEADER */}
         <section className="text-center mb-16">
-
           <p className="text-xs tracking-[0.4em] uppercase text-[#9a7654] mb-5">
             Kindly Respond
           </p>
@@ -382,212 +342,269 @@ END:VCALENDAR`;
           <p className="mt-5 text-[#756d63]">
             Please RSVP by April 5, 2026.
           </p>
-
         </section>
 
-        {/* =================================================
-           INVITATION SEARCH
-        ================================================= */}
+        {/* RSVP FORM */}
+        <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm mb-14">
 
-        {!invitationFound && !walkIn && (
-          <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm mb-14">
+          <div className="text-center">
+            <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-4">
+              RSVP
+            </p>
 
-            <div className="text-center">
+            <h2 className="font-serif text-3xl md:text-4xl">
+              {walkIn ? "Walk-In RSVP" : "Please RSVP"}
+            </h2>
 
-              <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-4">
-                Your Invitation
-              </p>
+            <p className="mt-4 text-sm text-[#756d63] max-w-md mx-auto">
+              {walkIn
+                ? "Please review your information and submit your Walk-In RSVP."
+                : "Fill out the form below. When you click Send RSVP, we will check your name against our invitation list."}
+            </p>
+          </div>
 
-              <h2 className="font-serif text-3xl md:text-4xl">
-                Find Your Invitation
-              </h2>
+          <form
+            onSubmit={submitRSVP}
+            className="mt-10 space-y-7"
+          >
 
-              <p className="mt-4 text-sm text-[#756d63] max-w-md mx-auto">
-                Enter your name as it appears on your invitation.
-              </p>
-
-            </div>
-
-            <div className="mt-8">
-
+            {/* NAME */}
+            <div>
               <label className="block text-xs tracking-[0.25em] uppercase mb-3">
                 Your Name
               </label>
 
               <input
                 type="text"
-                value={searchName}
+                value={guestName}
                 onChange={(e) => {
-                  setSearchName(e.target.value);
-                  setInvitationError("");
+                  setGuestName(e.target.value);
+                  setInvitationNotFound(false);
+                  setStatus("");
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    findInvitation();
-                  }
-                }}
+                required
                 placeholder="Enter your full name"
-                className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#9a7654]"
+                className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
               />
+
+              {!walkIn && (
+                <p className="text-xs text-[#8a8177] mt-2">
+                  Enter the name exactly as it appears on your invitation.
+                </p>
+              )}
+            </div>
+
+            {/* EMAIL */}
+            <div>
+              <label className="block text-xs tracking-[0.25em] uppercase mb-3">
+                Email
+              </label>
+
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="you@example.com"
+                className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
+              />
+            </div>
+
+            {/* ATTENDANCE + GUESTS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
+
+              <div>
+                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
+                  Attendance
+                </label>
+
+                <select
+                  value={attendance}
+                  onChange={(e) => setAttendance(e.target.value)}
+                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
+                >
+                  <option value="attending">
+                    Joyfully attending
+                  </option>
+
+                  <option value="declining">
+                    Regretfully declining
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
+                  Number of Guests
+                </label>
+
+                <select
+                  value={guests}
+                  onChange={(e) => setGuests(e.target.value)}
+                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
+                >
+                  <option value="1">
+                    1 Guest
+                  </option>
+
+                  <option value="2">
+                    2 Guests
+                  </option>
+                </select>
+              </div>
 
             </div>
 
-            {invitationError && (
-              <div className="mt-5 text-center text-sm text-red-600">
-                {invitationError}
+            {/* INVITATION STATUS */}
+            <div className="rounded-2xl bg-[#f8f5ef] p-6 text-center">
+
+              {!walkIn && !invitationNotFound && !invitedName && (
+                <>
+                  <p className="text-xs tracking-[0.2em] uppercase text-[#9a7654]">
+                    Invitation
+                  </p>
+
+                  <p className="font-serif text-xl mt-2">
+                    Your invitation will be checked
+                  </p>
+
+                  <p className="text-xs text-[#8a8177] mt-2">
+                    We will search your name after you click Send RSVP.
+                  </p>
+                </>
+              )}
+
+              {!walkIn && invitedName && seatsReserved && (
+                <>
+                  <p className="text-xs tracking-[0.2em] uppercase text-green-700">
+                    Invitation Found
+                  </p>
+
+                  <p className="font-serif text-2xl mt-2">
+                    Welcome, {invitedName}
+                  </p>
+
+                  <p className="text-sm text-[#756d63] mt-2">
+                    Your invitation includes{" "}
+                    <strong>
+                      {seatsReserved}{" "}
+                      {seatsReserved === 1 ? "seat" : "seats"}
+                    </strong>
+                    .
+                  </p>
+                </>
+              )}
+
+              {invitationNotFound && (
+                <>
+                  <p className="text-xs tracking-[0.2em] uppercase text-red-600">
+                    Invitation Not Found
+                  </p>
+
+                  <p className="font-serif text-2xl mt-2">
+                    We couldn't find your invitation
+                  </p>
+
+                  <p className="text-sm text-[#756d63] mt-3">
+                    Please check the spelling of your name. If you do not have
+                    an invitation, you may continue as a Walk-In RSVP.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={chooseWalkIn}
+                    className="mt-5 w-full bg-[#29251f] text-white rounded-full py-4 tracking-[0.2em] uppercase text-xs hover:bg-[#3b352e] transition"
+                  >
+                    RSVP as Walk-In
+                  </button>
+                </>
+              )}
+
+              {walkIn && (
+                <>
+                  <p className="text-xs tracking-[0.2em] uppercase text-[#9a7654]">
+                    Walk-In RSVP
+                  </p>
+
+                  <p className="font-serif text-xl mt-2">
+                    Maximum 2 guests
+                  </p>
+
+                  <p className="text-xs text-[#8a8177] mt-2">
+                    Your RSVP will be recorded as a Walk-In guest.
+                  </p>
+                </>
+              )}
+
+            </div>
+
+            {/* MESSAGE */}
+            <div>
+              <label className="block text-xs tracking-[0.25em] uppercase mb-3">
+                Message (Optional)
+              </label>
+
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={4}
+                placeholder="A little note for the couple..."
+                className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none resize-none"
+              />
+            </div>
+
+            {/* STATUS */}
+            {status && (
+              <div
+                className={`text-center text-sm ${
+                  status.includes("received")
+                    ? "text-green-700"
+                    : "text-red-600"
+                }`}
+              >
+                {status}
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={findInvitation}
-              disabled={searching}
-              className="w-full mt-8 bg-[#29251f] text-white rounded-full py-5 tracking-[0.25em] uppercase text-sm hover:bg-[#3b352e] transition disabled:opacity-50"
-            >
-              {searching ? "Checking..." : "Find My Invitation"}
-            </button>
+            {/* SUBMIT */}
+            {!invitationNotFound && (
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-[#29251f] text-white rounded-full py-5 tracking-[0.25em] uppercase text-sm hover:bg-[#3b352e] transition disabled:opacity-50"
+              >
+                {loading
+                  ? walkIn
+                    ? "Sending Walk-In RSVP..."
+                    : "Checking Invitation..."
+                  : "Send RSVP"}
+              </button>
+            )}
 
-            {/* =================================================
-               WALK-IN OPTION
-            ================================================= */}
+          </form>
 
-            <div className="flex items-center gap-4 my-8">
-
-              <div className="h-px bg-[#ddd5ca] flex-1" />
-
-              <span className="text-xs tracking-[0.2em] uppercase text-[#9a7654]">
-                or
-              </span>
-
-              <div className="h-px bg-[#ddd5ca] flex-1" />
-
-            </div>
-
-            <div className="text-center">
+          {/* BACK TO INVITATION */}
+          {walkIn && (
+            <div className="mt-8 pt-8 border-t border-[#eee8df] text-center">
 
               <p className="text-sm text-[#756d63] mb-4">
-                Don't have an invitation?
+                Think you have an invitation?
               </p>
 
               <button
                 type="button"
-                onClick={openWalkInRSVP}
-                className="w-full border border-[#9a7654] text-[#9a7654] rounded-full py-4 tracking-[0.2em] uppercase text-xs hover:bg-[#9a7654] hover:text-white transition"
+                onClick={backToInvitationRSVP}
+                className="text-xs tracking-[0.2em] uppercase text-[#9a7654] underline underline-offset-4"
               >
-                RSVP as Walk-In
+                Check My Invitation
               </button>
 
             </div>
+          )}
 
-          </section>
-        )}
+        </section>
 
-        {/* =================================================
-           INVITATION FOUND
-        ================================================= */}
-
-        {invitationFound && (
-          <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm mb-14 text-center">
-
-            <div className="text-4xl mb-4">
-              ♡
-            </div>
-
-            <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-4">
-              Invitation Found
-            </p>
-
-            <h2 className="font-serif text-3xl md:text-4xl text-[#9a7654]">
-              Welcome, {matchedGuest}
-            </h2>
-
-            <p className="mt-4 text-[#756d63]">
-              We are delighted to celebrate this special day with you.
-            </p>
-
-            <div className="mt-6 inline-block rounded-2xl bg-[#f8f5ef] px-8 py-5">
-
-              <p className="text-xs tracking-[0.25em] uppercase text-[#8a8177]">
-                Seats Reserved
-              </p>
-
-              <p className="font-serif text-4xl text-[#9a7654] mt-2">
-                {seatsReserved}
-              </p>
-
-              <p className="text-sm text-[#756d63] mt-1">
-                {seatsReserved === 1
-                  ? "seat reserved for your invitation"
-                  : "seats reserved for your invitation"}
-              </p>
-
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setInvitationFound(false);
-                setMatchedGuest("");
-                setGuestName("");
-                setSearchName("");
-                setInvitationError("");
-                setSeatsReserved(2);
-                setStatus("");
-              }}
-              className="block mx-auto mt-6 text-xs tracking-[0.15em] uppercase text-[#9a7654] underline underline-offset-4"
-            >
-              Search another name
-            </button>
-
-          </section>
-        )}
-
-        {/* =================================================
-           WALK-IN NOTICE
-        ================================================= */}
-
-        {walkIn && (
-          <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm mb-14 text-center">
-
-            <div className="text-4xl mb-4">
-              ♡
-            </div>
-
-            <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-4">
-              Walk-In RSVP
-            </p>
-
-            <h2 className="font-serif text-3xl md:text-4xl">
-              Welcome
-            </h2>
-
-            <p className="mt-4 text-[#756d63]">
-              Please complete the RSVP form below.
-            </p>
-
-            <p className="mt-3 text-sm text-[#9a7654]">
-              Maximum of 2 guests.
-            </p>
-
-            <button
-              type="button"
-              onClick={() => {
-                setWalkIn(false);
-                setStatus("");
-              }}
-              className="block mx-auto mt-6 text-xs tracking-[0.15em] uppercase text-[#9a7654] underline underline-offset-4"
-            >
-              Back to invitation search
-            </button>
-
-          </section>
-        )}
-
-        {/* =================================================
-           EVENT INFORMATION
-        ================================================= */}
-
+        {/* WEDDING DETAILS */}
         <section className="text-center mb-14">
 
           <h2 className="font-serif text-4xl md:text-5xl tracking-wide text-[#9a7654] leading-tight">
@@ -599,7 +616,6 @@ END:VCALENDAR`;
           </p>
 
           <div className="mt-6 space-y-2 text-[#756d63]">
-
             <p>
               April 23, 2026 · 4:00 PM
             </p>
@@ -615,7 +631,6 @@ END:VCALENDAR`;
             <p>
               Formal · Semi Formal
             </p>
-
           </div>
 
           <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
@@ -645,225 +660,13 @@ END:VCALENDAR`;
 
         </section>
 
-        {/* =================================================
-           RSVP FORM
-        ================================================= */}
-
-        {(invitationFound || walkIn) && (
-          <section className="bg-white rounded-3xl p-7 md:p-10 shadow-sm">
-
-            <div className="text-center mb-8">
-
-              <p className="text-xs tracking-[0.35em] uppercase text-[#9a7654] mb-3">
-                {walkIn ? "Walk-In RSVP" : "RSVP"}
-              </p>
-
-              <h2 className="font-serif text-3xl md:text-4xl">
-                Please Respond
-              </h2>
-
-              <p className="mt-3 text-sm text-[#756d63]">
-                {walkIn
-                  ? "Please provide your details below."
-                  : `Your invitation includes a maximum of ${seatsReserved} ${
-                      seatsReserved === 1 ? "seat" : "seats"
-                    }.`}
-              </p>
-
-            </div>
-
-            <form
-              onSubmit={submitRSVP}
-              className="space-y-7"
-            >
-
-              {/* NAME */}
-
-              <div>
-
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Your Name
-                </label>
-
-                <input
-                  type="text"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  required
-                  placeholder="Your full name"
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
-                />
-
-              </div>
-
-              {/* EMAIL */}
-
-              <div>
-
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Email
-                </label>
-
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="you@example.com"
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none focus:border-[#29251f]"
-                />
-
-              </div>
-
-              {/* ATTENDANCE + NUMBER OF GUESTS */}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
-
-                <div>
-
-                  <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                    Attendance
-                  </label>
-
-                  <select
-                    value={attendance}
-                    onChange={(e) => setAttendance(e.target.value)}
-                    className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
-                  >
-
-                    <option value="attending">
-                      Joyfully attending
-                    </option>
-
-                    <option value="declining">
-                      Regretfully declining
-                    </option>
-
-                  </select>
-
-                </div>
-
-                <div>
-
-                  <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                    Number of Guests
-                  </label>
-
-                  <select
-                    value={guests}
-                    onChange={(e) => setGuests(e.target.value)}
-                    className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none"
-                  >
-
-                    {Array.from(
-                      {
-                        length: Math.max(
-                          1,
-                          walkIn ? 2 : seatsReserved
-                        ),
-                      },
-                      (_, index) => index + 1
-                    ).map((number) => (
-                      <option
-                        key={number}
-                        value={String(number)}
-                      >
-                        {number}{" "}
-                        {number === 1 ? "Guest" : "Guests"}
-                      </option>
-                    ))}
-
-                  </select>
-
-                </div>
-
-              </div>
-
-              {/* SEAT NOTICE */}
-
-              <div className="rounded-2xl bg-[#f8f5ef] p-5 text-center">
-
-                <p className="text-xs tracking-[0.2em] uppercase text-[#9a7654]">
-                  {walkIn ? "Walk-In RSVP" : "Your Invitation"}
-                </p>
-
-                <p className="font-serif text-xl mt-2">
-                  Maximum{" "}
-                  {walkIn ? 2 : seatsReserved}{" "}
-                  {walkIn
-                    ? "guests"
-                    : seatsReserved === 1
-                    ? "guest"
-                    : "guests"}
-                </p>
-
-                <p className="text-xs text-[#8a8177] mt-1">
-                  Please do not exceed your reserved seats.
-                </p>
-
-              </div>
-
-              {/* MESSAGE */}
-
-              <div>
-
-                <label className="block text-xs tracking-[0.25em] uppercase mb-3">
-                  Message (Optional)
-                </label>
-
-                <textarea
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  rows={4}
-                  placeholder="A little note for the couple..."
-                  className="w-full border-b border-[#d8d1c7] bg-transparent py-3 outline-none resize-none"
-                />
-
-              </div>
-
-              {/* STATUS */}
-
-              {status && (
-                <div
-                  className={`text-center text-sm ${
-                    status.includes("Thank you")
-                      ? "text-green-700"
-                      : "text-red-600"
-                  }`}
-                >
-                  {status}
-                </div>
-              )}
-
-              {/* SUBMIT */}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#29251f] text-white rounded-full py-5 tracking-[0.25em] uppercase text-sm hover:bg-[#3b352e] transition disabled:opacity-50"
-              >
-                {loading ? "Sending..." : "Send RSVP"}
-              </button>
-
-            </form>
-
-          </section>
-        )}
-
-        {/* =================================================
-           FOOTER
-        ================================================= */}
-
         <footer className="text-center mt-12 text-sm text-[#8a8177]">
-
           <p>
             We can't wait to celebrate with you. ❤️
           </p>
-
         </footer>
 
       </div>
-
     </main>
   );
 }
